@@ -2,6 +2,8 @@ CGK-Laboratory calcium imaging analysis pipeline using Inscopix tools.
 
 ### Example- Accepted cells from rat nucleus accumbens
 <img src="https://github.com/CGK-Laboratory/calcium_imaging_analysis_pipeline/assets/133822850/f4036d52-92e6-416b-a723-8a1465cba448" width="500">
+
+
 ----------------------------------------------------------------------------------------------------------------------------------------------------------  
 
 ### Additional tools 
