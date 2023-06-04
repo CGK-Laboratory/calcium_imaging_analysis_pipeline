@@ -17,13 +17,13 @@ class isx_files_handler:
     data_subfolders : list
         Where each file (or files) following each files_pattern element are.
     files_pattern : list
-        Naming patterns for the files, and easy way to handle seleection one or multiple files from the same folder.
+        Naming patterns for the files, and easy way to handle selection of one or multiple files from the same folder.
     outputsfolder : list
-        Folder where the file structure (following only the data_subfolders) will be copy and the results written.
+        Folder where the file structure (following only the data_subfolders) will be copied and the results written.
     processing_steps: list
         Naming steps will be use, adding one affter the previous ones.
     one_file_per_folder: bool
-        If True it will check than one and only one file is found with the pattern in it's folder
+        If True it will check then one and only one file is found with the pattern in it's folder
 
     """
 
@@ -71,7 +71,7 @@ class isx_files_handler:
 
     def get_pair_filenames(self, operation):
         """
-        This method return the input/output pairs for the given operation step operation.
+        This method returns the input/output pairs for the given operation step operation.
         Parameters
         ----------
         operation : str
@@ -156,7 +156,7 @@ class isx_files_handler:
 
 def eqhist_tf(im, nbins=256):
     """
-    This function transform the value of the pixels of the image im to have an uniform distribution of intensities
+    This function transforms the value of the pixels of the image into having an uniform distribution of intensities
     """
     imhist, bins = np.histogram(im.flatten(), nbins, normed=True)
     cdf = imhist.cumsum()
@@ -172,7 +172,7 @@ def plot_max_dff_and_cellmap(
     cellsetfile, maxdff, eqhist=True, status_list=["accepted", "rejected", "undecided"]
 ):
     """
-    This function plot the maxdff digure (with an optional transformation) add add the "borders" of the cell map
+    This function plots the maxdff digure (with an optional transformation) and add the "borders" of the cell map
     Parameters
     ----------
     cellsetfile : str
@@ -217,7 +217,7 @@ def plot_max_dff_and_cellmap_fh(
     status_list=["accepted", "rejected", "undecided"],
 ):
     """
-    This function plot the maxdff figure (with an optional transformation) and adds the "borders" of the cell map
+    This function plots the maxdff figure (with an optional transformation) and adds the "borders" of the cell map
 
     Parameters
     ----------
@@ -328,4 +328,68 @@ def interactive_reject_accept_cell(files_handler, cellset_names):
             select_files, select_cell, status, pn.Row(accept_button, reject_button)
         ),
         timeplot,
+    )
+
+def get_segment_from_movie(inputfile, outputfile, borders, keep_start_time=False,unit='minutes'):
+    """
+    This function gets a segment of a video to crete a new one. It's just an easy handler of isx.trim_movie
+
+    Parameters
+    ----------
+    inputfile : str or Path
+        Path of the input file to use
+    outputfile : str or Path
+        Path of the output file to use
+    borders: list like 
+        With two elements of the borders in minutes (integers) of the segment. Where negative times means from the end like indexing in a numpy array
+    unit:
+        the unit to use for border. It could be 'minutes' or 'seconds'
+        
+    Example:
+    >>> get_segment_from_movie('inputfile.isxd','output.isxd',[-30, -1]) #last 30 minutes
+    """
+    assert len(borders)==2, 'borders must have two elements'
+    assert unit in ['minutes' , 'seconds'], '''unit could be 'minutes' or 'seconds'. '''
+    movie = isx.Movie.read(inputfile)
+    if unit=='minutes':
+         unitfactor = 60
+    else:
+         unitfactor = 1
+    duration_unit = movie.timing.num_samples  * movie.timing.period.to_msecs() / (1000 * unitfactor) 
+    timing_period_unit = movie.timing.period.to_msecs() / (1000 * unitfactor)
+    numframes = movie.timing.num_samples
+    
+    movie.flush()
+
+    crop_segments = []
+    assert borders[0] > -duration_unit, 'asking for a segment from {minutes[0]} {unit} before the end, but video is {duration_minutes} {unit} long.'
+    assert borders[0] < duration_unit, 'asking for a segment from {minutes[0]} {unit}, but video is {duration_minutes} {unit} long.'
+    assert borders[1] < duration_unit, 'asking for a segment up to {minutes[0]} {unit}, but video is {duration_minutes} {unit} long.'
+    assert borders[1] > -duration_unit, 'asking for a segment up to {minutes[0]} {unit} before the end, but video is {duration_minutes} {unit} long.'
+
+    #remove fist frames:
+    if borders[0]!=0 and borders[0]!=-duration_unit: #don't cut if the segments are from the beggining or just exactlt duration before the end
+        if borders[0]<0:
+            end1 =  (duration_unit + borders[0])/timing_period_unit -1
+        else:
+            end1 =  borders[0] / timing_period_unit - 1
+        crop_segments.append([0, int(end1)])
+    #remove last frames:
+    if borders[1]!=-1 and  borders[1]!=duration_unit:  #don't cut if the segments are up to the end or just exactlt duration
+        if borders[1]<0:
+           start1 =  (duration_unit + borders[1] + 1) / timing_period_unit + 1
+        else:
+           start1 =  borders[1] / timing_period_unit + 1
+        crop_segments.append([int(start1), numframes])
+
+    if os.path.exists(outputfile):
+        os.remove(outputfile)
+    if len(crop_segments)==0:
+        print('no trim need it')
+        return
+    isx.trim_movie(
+        input_movie_file=inputfile,  
+        output_movie_file=outputfile, 
+        crop_segments=np.array(crop_segments),
+        keep_start_time=keep_start_time
     )
