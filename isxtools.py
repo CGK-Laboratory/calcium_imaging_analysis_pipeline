@@ -40,6 +40,7 @@ class isx_files_handler:
         processing_steps=["trim", "PP", "BP", "MC"],
         one_file_per_folder=True,
         recording_labels=None,
+        parameters_path = 'default_parameter.json' #change path
     ) -> None:
         if not isinstance(outputsfolders, list):
             outputsfolders = [outputsfolders]*len(data_subfolders)
@@ -74,6 +75,10 @@ class isx_files_handler:
         else:
             self.recording_labels = recording_labels
         self._animals = None
+        assert os.path.exists(parameters_path), 'parameters file does not exist'
+        with open(parameters_path) as file:
+            self.parameters_path = json.load(file) 
+            
     def get_pair_filenames(self, operation):
         """
         This method returns the input/output pairs for the given operation step operation.
@@ -203,21 +208,37 @@ class isx_files_handler:
                     
         if op.startswith('BP'):
             print("Applying bandpass filter, please wait...\n")
-            spatial_filter_step(pairlist, verbose)
+            parameters = self.parameters_path['BP'].copy() 
+            for key, value in kws.items():
+                assert key in parameters, f'The parameter: {key} does not exist'
+                parameters[key] = value
+            spatial_filter_step(pairlist, parameters, verbose)
             return
         
         if op.startswith('PP'):
             print('Preprocessing, please wait...\n')
-            preprocess_step(pairlist, verbose)
+            parameters = self.parameters_path['PP'].copy() 
+            for key, value in kws.items():
+                assert key in parameters, f'The parameter: {key} does not exist'
+                parameters[key] = value
+            preprocess_step(pairlist, parameters, verbose)
             return
                         
         if op.startswith('MC'):
             print("Applying motion correction. Please wait...\n")
-            motion_correct_step(self, op, pairlist, verbose) 
+            parameters = self.parameters_path['MC'].copy() 
+            for key, value in kws.items():
+                assert key in parameters, f'The parameter: {key} does not exist'
+                parameters[key] = value
+            motion_correct_step(self,parameters, op, pairlist, verbose) 
             return
         if op.startswith('Trim'):
             print('Trim movies...\n')
-            trim_movie(list, kws['video_len'] , verbose)
+            parameters = self.parameters_path['Trim'].copy() 
+            for key, value in kws.items():
+                assert key in parameters, f'The parameter: {key} does not exist'
+                parameters[key] = value
+            trim_movie(list, parameters , verbose)
             return
         if verbose:
             print("Error in operation name\n")                              
@@ -480,7 +501,7 @@ def get_segment_from_movie(inputfile, outputfile, borders, keep_start_time=False
         if is True, print some information
         
     """
-def motion_correct_step(filehandler, op, pairlist, verbose = False):
+def motion_correct_step(filehandler, parameters, op, pairlist, verbose = False):
     actual_idx = filehandler.processing_steps.index(op)
     if actual_idx != 0:
         op_prev = filehandler.processing_steps[actual_idx - 1]
@@ -489,114 +510,138 @@ def motion_correct_step(filehandler, op, pairlist, verbose = False):
         crop_rect_files = filehandler.get_results_filenames("crop_rect.csv", op=op_prev)
     else:
         assert "Not Implemented"
-    log_data = {'max_translation': 20, 'low_bandpass_cutoff': None, 'high_bandpass_cutoff': None,
-                'roi': None, 'reference_segment_index': 0, 'reference_frame_index': 0, 
-                 'global_registration_weight': 1.0}  
     for i, (input, output) in enumerate(pairlist):
-        json_file = os.path.splitext(output)+'.json'
-        if os.path.exists(json_file):
-            os.remove(json_file)
-        if not os.path.exists(output):
-            new_data = {'input_movie_files': input, 'output_movie_files': output,
-                        'reference_file_name': mean_proj_files[i],'output_translation_files': translation_files[i],
-                        'output_crop_rect_file': crop_rect_files[i]
-                        }
-            log_data.update(new_data)
-            isx.motion_correct( 
-                **log_data  
-            )
-            log_data['function'] = 'motion_correct'
-            log_data['isx_version'] = isx.__version__
-            write_log_file(log_data)
+        if consistency_output_json(parameters, output):
             if verbose:
-                print("{} motion correction completed".format(output))
-        else:
-            if verbose:
-                print(output + " already exists, series skipped")
+                print("Already ran with this parameters")
+            continue
+        new_data = {'input_movie_files': input, 'output_movie_files': output,
+                    'reference_file_name': mean_proj_files[i],'output_translation_files': translation_files[i],
+                    'output_crop_rect_file': crop_rect_files[i]
+                    }
+        parameters.update(new_data)
+        isx.motion_correct( 
+            **parameters  
+        )
+        parameters['function'] = 'motion_correct'
+        parameters['isx_version'] = isx.__version__
+        write_log_file(parameters)
+        if verbose:
+            print("{} motion correction completed".format(output))  
                 
-def preprocess_step(list, verbose = False):
+def preprocess_step(list, parameters, verbose = False):
     for input, output in list:
-        json_file = os.path.splitext(output)+'.json'
-        if os.path.exists(json_file):
-            os.remove(json_file)
-        movie = isx.Movie.read(input) 
-        resolution=movie.spacing.num_pixels
-        if resolution[0]>700:
-            sp_downsampling = 2
-        else:
-            sp_downsampling = 1
-        tp_downsampling = 1 
-        if not os.path.exists(output):
-            log_data = {'input_movie_files': input, 'output_movie_files': output,'temporal_downsample_factor': tp_downsampling,
-                'spatial_downsample_factor': sp_downsampling, 'crop_rect':None,'fix_defective_pixels':True}
-            isx.preprocess(
-                **log_data
-            )
-            log_data['function'] = 'preprocess'
-            log_data['isx_version'] = isx.__version__
-            write_log_file(log_data)
-            if verbose:
-                print("{} preprocessing completed".format(output))
-        else:
-            if verbose:
-                print(output + " already exists, series skipped")
-
+        if isinstance(parameters['sp_downsampling'],str):
+            res_idx, value = parameters['sp_downsampling'].split('_')
+            if res_idx == 'maxHeight':
+                idx_resolution = 0
+            elif res_idx == 'maxWidth':
+                idx_resolution = 1
+            else:
+               assert False, 'error in sp_downsampling parameter value' 
+            movie = isx.Movie.read(input) 
+            resolution=movie.spacing.num_pixels
+            parameters['sp_downsampling'] = np.ceil(resolution[idx_resolution] / float(value))
                 
-def spatial_filter_step(list, verbose = False):
-    for input, output in list:
-        json_file = os.path.splitext(output)+'.json'
-        if os.path.exists(json_file):
-            os.remove(json_file)
-        if not os.path.exists(output):
-            log_data = {'input_movie_files': input, 'output_movie_files': output,'low_cutoff':0.005, 'high_cutoff': 0.5, 'retain_mean': False,'subtract_global_minimum': True}
-            isx.spatial_filter(
-                **log_data
-                # heyfernando can you exaplain to me the plots (4,2,fi%4*2+1+fi//4)-- What does this mean
-                # leave subtract_global_minimum setting as true
-                # for correct dff display
-            )
-            log_data['function'] = 'spatial_filter'
-            log_data['isx_version'] = isx.__version__
-            write_log_file(log_data)
+        parameters.update({'input_movie_files': input, 'output_movie_files': output})
+        if consistency_output_json(parameters, output):
             if verbose:
-                print("{} bandpass filtering completed".format(output))
-        else:
-            if verbose:
-                print(output + " already exists, series skipped")
+                print("Already ran with this parameters")
+            continue
+        isx.preprocess(
+            **parameters
+        )
+        parameters['function'] = 'preprocess'
+        parameters['isx_version'] = isx.__version__
+        write_log_file(parameters)
+        if verbose:
+            print("{} preprocessing completed".format(output))  
                 
-def trim_movie(list, video_len, verbose = False):
+def spatial_filter_step(list, parameters, verbose = False):
+    for input, output in list:      
+        parameters.update({'input_movie_files': input, 'output_movie_files': output})
+        if consistency_output_json(parameters, output):
+            if verbose:
+                print("Already ran with this parameters")
+            continue
+        isx.spatial_filter(
+        **parameters
+        )
+        parameters['function'] = 'spatial_filter'
+        parameters['isx_version'] = isx.__version__
+        write_log_file(parameters)
+        if verbose:
+            print("{} bandpass filtering completed".format(output)) 
+                
+def trim_movie(list, user_parameters, verbose = False):
+    assert user_parameters['video_len'] is not None, 'Trim movie requires parameter video len'
     for input, output in list:
-        json_file = os.path.splitext(output)+'.json'
-        if os.path.exists(json_file):
-            os.remove(json_file)
-        log_data = {'input_movie_files': input, 'output_movie_files': output}
+        parameters = {'input_movie_files': input, 'output_movie_files': output}
         movie = isx.Movie.read(input) 
         sr = 1/(movie.timing.period.to_msecs()/1000)
-        endframe = video_len*sr # 30 minutes at 15 Hz
+        endframe =  user_parameters['video_len']*sr
         maxfileframe = movie.timing.num_samples()+1
         if maxfileframe < endframe:
-            log_data['maxfileframe'] = maxfileframe
-            log_data['endframe'] = endframe
+            parameters['maxfileframe'] = maxfileframe
+            parameters['endframe'] = endframe
             assert("max time selected is greater than duration of the video")
-        if not os.path.exists(output):
-            log_data['crop_segments'] = np.array([[endframe,maxfileframe]])
-            isx.trim_movie(
-                # one series per loop
-                **log_data
-            )
+        parameters['crop_segments'] = np.array([[endframe,maxfileframe]])
+        if consistency_output_json(parameters, output):
             if verbose:
-                print('{} trimming completed'.format(output))
-            assert os.path.exists(output),  'File not created: {}'.format(output)
-        else:
-            if verbose:
-                print(output + " already exists, series skipped")
-        log_data['function'] = 'spatial_filter'
-        log_data['isx_version'] = isx.__version__
-        write_log_file(log_data)
+                print("Already ran with this parameters")
+            continue
+        isx.trim_movie(
+            **parameters
+        )
+        if verbose:
+            print('{} trimming completed'.format(output))
+        assert os.path.exists(output),  'File not created: {}'.format(output)
+        parameters['function'] = 'spatial_filter'
+        parameters['isx_version'] = isx.__version__
+        write_log_file(parameters)
         
 def write_log_file(data):
     log_path = os.path.splitext(data['output_movie_files'])[0] + ".json"
     actual_date = datetime.utcnow()
+    data['input_modification_data'] = None
+    input_json = os.path.splitext(data['input_movie_files'])[0] + ".json"
+    if os.path.exists(input_json):
+        with open(input_json) as file:
+            input_data = json.load(file)
+        data['input_modification_data']=input_data['date']
     data['date']= actual_date.strftime("%Y-%m-%d %H:%M:%S")
     with open(log_path, 'w') as file:
         json.dump(data, file, indent = 4)
+        
+def is_same_parameters(json_file, new_data):
+    with open(json_file) as file:
+        prev_data = json.load(file)
+    for key, value in new_data.items():
+        if prev_data[key] != value:
+            return False
+    return True
+
+#Return True if the input file was not modified or if it does not exist
+def is_same_input(input, output):
+    if os.path.exists(input):
+        with open(output) as out_file:
+            out_data = json.load(out_file)
+        with open(input) as in_file:
+            in_data = json.load(in_file)
+        if out_data['input_modification_data'] != in_data['date']:
+            return False
+    return True
+
+
+def consistency_output_json(parameters, output):
+    json_file = os.path.splitext(output)+'.json'
+    if os.path.exists(json_file):
+        if os.path.exists(output):
+            input_json = os.path.splitext(input)+'.json'
+            if is_same_input(input_json, json_file):
+                if is_same_parameters(json_file, parameters):
+                    return True
+        os.remove(json_file)
+    if os.path.exists(output):
+        os.remove(output)
+    return False
