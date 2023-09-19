@@ -2,8 +2,12 @@ import os
 from pathlib import Path
 from glob import glob
 import numpy as np
-import isx
+import isx 
 import matplotlib.pyplot as plt
+import os
+import log_file_fun
+from datetime import datetime
+import json
 
 
 class isx_files_handler:
@@ -18,7 +22,7 @@ class isx_files_handler:
         Where each file (or files) following each files_pattern element are.
     files_pattern : list
         Naming patterns for the files, and easy way to handle selection of one or multiple files from the same folder.
-    outputsfolder : list
+    outputsfolders : list
         Folder where the file structure (following only the data_subfolders) will be copied and the results written.
     processing_steps: list
         Naming steps will be use, adding one affter the previous ones.
@@ -32,18 +36,20 @@ class isx_files_handler:
         main_data_folder,
         data_subfolders,
         files_pattern,
-        outputsfolder,
+        outputsfolders,
         processing_steps=["trim", "PP", "BP", "MC"],
         one_file_per_folder=True,
         recording_labels=None,
+        parameters_path = 'default_parameter.json' #change path
     ) -> None:
-        self.outputsfolder = Path(outputsfolder)
-        self.data_subfolders = data_subfolders
-        if not os.path.exists(self.outputsfolder):
-            os.mkdir(self.outputsfolder)
-        for s in data_subfolders:
-            os.makedirs(self.outputsfolder / s, exist_ok=True)
+        if not isinstance(outputsfolders, list):
+            outputsfolders = [outputsfolders]*len(data_subfolders)
+        self.outputsfolders = [Path(o) for o in outputsfolders]
+        self.data_subfolders = data_subfolders    
+        for ofolder,sfolder in zip(self.outputsfolders, data_subfolders):
+            os.makedirs(ofolder / sfolder, exist_ok=True)
         rec_names = []
+        #check file existence and concatenate
         for i, f in enumerate(data_subfolders):
             if isinstance(main_data_folder, list):
                 this_main_data_folder = Path(main_data_folder[i])
@@ -68,7 +74,11 @@ class isx_files_handler:
             self.recording_labels = rec_names
         else:
             self.recording_labels = recording_labels
-
+        self._animals = None
+        assert os.path.exists(parameters_path), 'parameters file does not exist'
+        with open(parameters_path) as file:
+            self.parameters_path = json.load(file) 
+            
     def get_pair_filenames(self, operation):
         """
         This method returns the input/output pairs for the given operation step operation.
@@ -91,13 +101,13 @@ class isx_files_handler:
         else:
             suffix_in = "-" + "-".join(self.processing_steps[:opi]) + ".isxd"
 
-        for fname, file in zip(self.data_subfolders, self.rec_names):
+        for ofolder, fname, file in zip(self.outputsfolders,self.data_subfolders, self.rec_names):
             outputs.append(
-                str(Path(self.outputsfolder, fname, Path(file).stem + suffix_out))
+                str(Path(ofolder, fname, Path(file).stem + suffix_out))
             )
             if suffix_in is not None:
                 inputs.append(
-                    str(Path(self.outputsfolder, fname, Path(file).stem + suffix_in))
+                    str(Path(ofolder, fname, Path(file).stem + suffix_in))
                 )
 
         return zip(inputs, outputs)
@@ -120,12 +130,28 @@ class isx_files_handler:
             names = self.processing_steps[: opi + 1]
         suffix_out = "-" + "-".join(names) + ".isxd"
         outputs = []
-        for fname, file in zip(self.data_subfolders, self.rec_names):
+        for ofolder,fname, file in zip(self.outputsfolders,self.data_subfolders, self.rec_names):
             outputs.append(
-                str(Path(self.outputsfolder, fname, Path(file).stem + suffix_out))
+                str(Path(ofolder, fname, Path(file).stem + suffix_out))
             )
         return outputs
 
+    def check_str_in_filenames(self, strlist,only_warning=True):
+        """
+        This method verify the order of the files. Checking that each element of the input list is included in the recording filenames
+        Parameters
+        ----------
+        strlist : list
+            List of strings to check
+        only_warning: bool
+            Default, True. If False, throw an exception
+        """
+        for x,y in zip(strlist,self.rec_names):
+            if only_warning and x not in y:
+                print(f"Warning: {x} not in {y}")
+            else:
+                assert x in y, f"Error {x} not in {y}"
+    
     def get_results_filenames(self, name, op=None, subfolder="", idx=None):
         if op is not None:
             opi = self.processing_steps.index(op)
@@ -141,10 +167,12 @@ class isx_files_handler:
 
         for i, (fname, file) in enumerate(zip(self.data_subfolders, self.rec_names)):
             if idx is None or i in idx:
+                if not os.path.exists(subfolder):
+                    os.makedirs(subfolder)
                 outputs.append(
                     str(
                         Path(
-                            self.outputsfolder,
+                            self.outputsfolders[i],
                             fname,
                             subfolder,
                             Path(file).stem + suffix_out,
@@ -152,7 +180,69 @@ class isx_files_handler:
                     )
                 )
         return outputs
+    
+    @property
+    def animals(self):
+        return self._animals
 
+    @animals.setter
+    def animals(self, animals):
+        self._animals = np.array(animals)
+        
+    def remove_output_files(self, op):
+        paths=self.get_filenames(op)
+        for path in paths:
+            if os.path.exists(path):
+                os.remove(path)
+                
+    def run_step(self, op,overwrite=False, verbose=False, **kws):
+        pairlist = self.get_pair_filenames(op)
+        
+        if overwrite:
+            for input, output in pairlist:
+                if os.path.exists(output):
+                    os.remove(output)
+                json_file = os.path.splitext(output)+'.json'
+                if os.path.exists(json_file):
+                    os.remove(json_file)
+                    
+        if op.startswith('BP'):
+            print("Applying bandpass filter, please wait...\n")
+            parameters = self.parameters_path['BP'].copy() 
+            for key, value in kws.items():
+                assert key in parameters, f'The parameter: {key} does not exist'
+                parameters[key] = value
+            spatial_filter_step(pairlist, parameters, verbose)
+            return
+        
+        if op.startswith('PP'):
+            print('Preprocessing, please wait...\n')
+            parameters = self.parameters_path['PP'].copy() 
+            for key, value in kws.items():
+                assert key in parameters, f'The parameter: {key} does not exist'
+                parameters[key] = value
+            preprocess_step(pairlist, parameters, verbose)
+            return
+                        
+        if op.startswith('MC'):
+            print("Applying motion correction. Please wait...\n")
+            parameters = self.parameters_path['MC'].copy() 
+            for key, value in kws.items():
+                assert key in parameters, f'The parameter: {key} does not exist'
+                parameters[key] = value
+            motion_correct_step(self,parameters, op, pairlist, verbose) 
+            return
+        if op.startswith('Trim'):
+            print('Trim movies...\n')
+            parameters = self.parameters_path['Trim'].copy() 
+            for key, value in kws.items():
+                assert key in parameters, f'The parameter: {key} does not exist'
+                parameters[key] = value
+            trim_movie(list, parameters , verbose)
+            return
+        if verbose:
+            print("Error in operation name\n")                              
+            
 
 def eqhist_tf(im, nbins=256):
     """
@@ -169,7 +259,7 @@ def eqhist_tf(im, nbins=256):
 
 
 def plot_max_dff_and_cellmap(
-    cellsetfile, maxdff, eqhist=True, status_list=["accepted", "rejected", "undecided"]
+    cellsetfile, maxdff, eqhist=True, status_list=["accepted", "rejected", "undecided"],colors=['red','green', 'black']
 ):
     """
     This function plots the maxdff digure (with an optional transformation) and add the "borders" of the cell map
@@ -183,9 +273,10 @@ def plot_max_dff_and_cellmap(
         Equalize histogram to handle extreme values and get a normalized distribution of intensities. Default True
     status_list : list
         Status of the cells to plot. Default: ['accepted', 'rejected', 'undecided']
-
+    colors : list
+        Colors of each status. Default: ['red','green', 'black']
     """
-
+    assert len(colors)>len(status_list), 'More colors are needed as the input'
     cell_set = isx.CellSet.read(cellsetfile)
     num_cells = cell_set.num_cells
 
@@ -198,10 +289,11 @@ def plot_max_dff_and_cellmap(
     plt.imshow(image, "Blues", interpolation="none", resample=False)
     for cell in range(num_cells):
         if cell_set.get_cell_status(cell) in status_list:
+            cindex = status_list.index(cell_set.get_cell_status(cell))            
             cell_image = cell_set.get_cell_image_data(cell).astype(np.float64)
             plt.contour(
                 cell_image > (0.8 * np.max(cell_image)),
-                colors="red",
+                colors=colors[cindex],
                 linewidths=[2],
                 alpha=0.3,
             )
@@ -215,6 +307,7 @@ def plot_max_dff_and_cellmap_fh(
     eqhist=True,
     cellsetname="cnmfe-cellset",
     status_list=["accepted", "rejected", "undecided"],
+    colors=['red','green', 'black']
 ):
     """
     This function plots the maxdff figure (with an optional transformation) and adds the "borders" of the cell map
@@ -229,6 +322,8 @@ def plot_max_dff_and_cellmap_fh(
         Equalize histogram to hadnle extreme values and get a normalized distribution of intensities. Default True
     status_list : list
         Status of the cells to plot. Default: ['accepted', 'rejected', 'undecided']
+    colors : list
+        Colors of each status. Default: ['red','green', 'black']
 
     """
     dataset = files_handler.get_results_filenames(cellsetname, op="MC", idx=[idx])[0]
@@ -393,3 +488,160 @@ def get_segment_from_movie(inputfile, outputfile, borders, keep_start_time=False
         crop_segments=np.array(crop_segments),
         keep_start_time=keep_start_time
     )
+    """
+    This function call isx.motion_correct funtion
+
+    Parameters
+    ----------
+    filehandler 
+        To get information from files
+    list : input, output files from de op "MC"
+        For optimization.
+    verbose: bool
+        if is True, print some information
+        
+    """
+def motion_correct_step(filehandler, parameters, op, pairlist, verbose = False):
+    actual_idx = filehandler.processing_steps.index(op)
+    if actual_idx != 0:
+        op_prev = filehandler.processing_steps[actual_idx - 1]
+        mean_proj_files = filehandler.get_results_filenames("mean_image", op=op_prev)
+        translation_files = filehandler.get_results_filenames("translations.csv", op=op_prev)
+        crop_rect_files = filehandler.get_results_filenames("crop_rect.csv", op=op_prev)
+    else:
+        assert "Not Implemented"
+    for i, (input, output) in enumerate(pairlist):
+        if consistency_output_json(parameters, output):
+            if verbose:
+                print("Already ran with this parameters")
+            continue
+        new_data = {'input_movie_files': input, 'output_movie_files': output,
+                    'reference_file_name': mean_proj_files[i],'output_translation_files': translation_files[i],
+                    'output_crop_rect_file': crop_rect_files[i]
+                    }
+        parameters.update(new_data)
+        isx.motion_correct( 
+            **parameters  
+        )
+        parameters['function'] = 'motion_correct'
+        parameters['isx_version'] = isx.__version__
+        write_log_file(parameters)
+        if verbose:
+            print("{} motion correction completed".format(output))  
+                
+def preprocess_step(list, parameters, verbose = False):
+    for input, output in list:
+        if isinstance(parameters['sp_downsampling'],str):
+            res_idx, value = parameters['sp_downsampling'].split('_')
+            if res_idx == 'maxHeight':
+                idx_resolution = 0
+            elif res_idx == 'maxWidth':
+                idx_resolution = 1
+            else:
+               assert False, 'error in sp_downsampling parameter value' 
+            movie = isx.Movie.read(input) 
+            resolution=movie.spacing.num_pixels
+            parameters['sp_downsampling'] = np.ceil(resolution[idx_resolution] / float(value))
+                
+        parameters.update({'input_movie_files': input, 'output_movie_files': output})
+        if consistency_output_json(parameters, output):
+            if verbose:
+                print("Already ran with this parameters")
+            continue
+        isx.preprocess(
+            **parameters
+        )
+        parameters['function'] = 'preprocess'
+        parameters['isx_version'] = isx.__version__
+        write_log_file(parameters)
+        if verbose:
+            print("{} preprocessing completed".format(output))  
+                
+def spatial_filter_step(list, parameters, verbose = False):
+    for input, output in list:      
+        parameters.update({'input_movie_files': input, 'output_movie_files': output})
+        if consistency_output_json(parameters, output):
+            if verbose:
+                print("Already ran with this parameters")
+            continue
+        isx.spatial_filter(
+        **parameters
+        )
+        parameters['function'] = 'spatial_filter'
+        parameters['isx_version'] = isx.__version__
+        write_log_file(parameters)
+        if verbose:
+            print("{} bandpass filtering completed".format(output)) 
+                
+def trim_movie(list, user_parameters, verbose = False):
+    assert user_parameters['video_len'] is not None, 'Trim movie requires parameter video len'
+    for input, output in list:
+        parameters = {'input_movie_files': input, 'output_movie_files': output}
+        movie = isx.Movie.read(input) 
+        sr = 1/(movie.timing.period.to_msecs()/1000)
+        endframe =  user_parameters['video_len']*sr
+        maxfileframe = movie.timing.num_samples()+1
+        if maxfileframe < endframe:
+            parameters['maxfileframe'] = maxfileframe
+            parameters['endframe'] = endframe
+            assert("max time selected is greater than duration of the video")
+        parameters['crop_segments'] = np.array([[endframe,maxfileframe]])
+        if consistency_output_json(parameters, output):
+            if verbose:
+                print("Already ran with this parameters")
+            continue
+        isx.trim_movie(
+            **parameters
+        )
+        if verbose:
+            print('{} trimming completed'.format(output))
+        assert os.path.exists(output),  'File not created: {}'.format(output)
+        parameters['function'] = 'spatial_filter'
+        parameters['isx_version'] = isx.__version__
+        write_log_file(parameters)
+        
+def write_log_file(data):
+    log_path = os.path.splitext(data['output_movie_files'])[0] + ".json"
+    actual_date = datetime.utcnow()
+    data['input_modification_data'] = None
+    input_json = os.path.splitext(data['input_movie_files'])[0] + ".json"
+    if os.path.exists(input_json):
+        with open(input_json) as file:
+            input_data = json.load(file)
+        data['input_modification_data']=input_data['date']
+    data['date']= actual_date.strftime("%Y-%m-%d %H:%M:%S")
+    with open(log_path, 'w') as file:
+        json.dump(data, file, indent = 4)
+        
+def is_same_parameters(json_file, new_data):
+    with open(json_file) as file:
+        prev_data = json.load(file)
+    for key, value in new_data.items():
+        if prev_data[key] != value:
+            return False
+    return True
+
+#Return True if the input file was not modified or if it does not exist
+def is_same_input(input, output):
+    if os.path.exists(input):
+        with open(output) as out_file:
+            out_data = json.load(out_file)
+        with open(input) as in_file:
+            in_data = json.load(in_file)
+        if out_data['input_modification_data'] != in_data['date']:
+            return False
+    return True
+
+
+def consistency_output_json(parameters, output):
+    json_file = os.path.splitext(output)+'.json'
+    if os.path.exists(json_file):
+        if os.path.exists(output):
+            input_json = os.path.splitext(input)+'.json'
+            if is_same_input(input_json, json_file):
+                if is_same_parameters(json_file, parameters):
+                    return True
+        os.remove(json_file)
+    if os.path.exists(output):
+        os.remove(output)
+    return False
