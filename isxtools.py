@@ -9,6 +9,14 @@ import log_file_fun
 from datetime import datetime
 import json
 
+def get_efocus(main_video):
+    gpio_set = isx.GpioSet.read(os.path.splitext(main_video)[0]+ '.gpio')
+    efocus_values = gpio_set.get_channel_data(gpio_set.channel_dict['e-focus'])[1]
+    efocus_values,efocus_counts = np.unique(efocus_values, return_counts=True)
+    min_frames_per_efocus = 100
+    video_efocus = efocus_values[efocus_counts>=min_frames_per_efocus]
+    assert video_efocus.shape[0] < 4, 'Too many efocus detected, early frames issue.'
+    return video_efocus.astype(int)
 
 class isx_files_handler:
     """
@@ -40,7 +48,7 @@ class isx_files_handler:
         processing_steps=["trim", "PP", "BP", "MC"],
         one_file_per_folder=True,
         recording_labels=None,
-        parameters_path = 'default_parameter.json' #change path
+        parameters_path = os.path.join(os.path.dirname(__file__),'default_parameter.json') #change path
     ) -> None:
         if not isinstance(outputsfolders, list):
             outputsfolders = [outputsfolders]*len(data_subfolders)
@@ -111,7 +119,7 @@ class isx_files_handler:
                 )
 
         return zip(inputs, outputs)
-
+    
     def get_filenames(self, op=None):
         """
         This method return the filenames of the files create after the operation op.
@@ -167,8 +175,10 @@ class isx_files_handler:
 
         for i, (fname, file) in enumerate(zip(self.data_subfolders, self.rec_names)):
             if idx is None or i in idx:
-                if not os.path.exists(subfolder):
-                    os.makedirs(subfolder)
+                os.makedirs(os.path.join(
+                            self.outputsfolders[i],
+                            fname,
+                            subfolder), exist_ok=True)
                 outputs.append(
                     str(
                         Path(
@@ -248,7 +258,7 @@ def eqhist_tf(im, nbins=256):
     """
     This function transforms the value of the pixels of the image into having an uniform distribution of intensities
     """
-    imhist, bins = np.histogram(im.flatten(), nbins, normed=True)
+    imhist, bins = np.histogram(im.flatten(), nbins, density=True)
     cdf = imhist.cumsum()
     cdf = 255 * cdf / cdf[-1]  # normalize
 
@@ -262,7 +272,7 @@ def plot_max_dff_and_cellmap(
     cellsetfile, maxdff, eqhist=True, status_list=["accepted", "rejected", "undecided"],colors=['red','green', 'black']
 ):
     """
-    This function plots the maxdff digure (with an optional transformation) and add the "borders" of the cell map
+    This function plots the maxdff figure (with an optional transformation) and add the "borders" of the cell map
     Parameters
     ----------
     cellsetfile : str
@@ -276,7 +286,7 @@ def plot_max_dff_and_cellmap(
     colors : list
         Colors of each status. Default: ['red','green', 'black']
     """
-    assert len(colors)>len(status_list), 'More colors are needed as the input'
+    assert len(colors)>=len(status_list), 'More colors are needed as the input'
     cell_set = isx.CellSet.read(cellsetfile)
     num_cells = cell_set.num_cells
 
@@ -307,7 +317,8 @@ def plot_max_dff_and_cellmap_fh(
     eqhist=True,
     cellsetname="cnmfe-cellset",
     status_list=["accepted", "rejected", "undecided"],
-    colors=['red','green', 'black']
+    colors=['red','green', 'black'],
+    op=None
 ):
     """
     This function plots the maxdff figure (with an optional transformation) and adds the "borders" of the cell map
@@ -326,8 +337,8 @@ def plot_max_dff_and_cellmap_fh(
         Colors of each status. Default: ['red','green', 'black']
 
     """
-    dataset = files_handler.get_results_filenames(cellsetname, op="MC", idx=[idx])[0]
-    maxdff = files_handler.get_results_filenames("maxdff", op="MC", idx=[idx])[0]
+    dataset = files_handler.get_results_filenames(cellsetname, op=op, idx=[idx])[0]
+    maxdff = files_handler.get_results_filenames("maxdff", op=op, idx=[idx])[0]
     plot_max_dff_and_cellmap(dataset, maxdff, eqhist, status_list)
 
 
@@ -375,7 +386,7 @@ def interactive_reject_accept_cell(files_handler, cellset_names):
             return
         nfile = files_handler.recording_labels.index(select_files.value)
         cs = isx.CellSet.read(
-            files_handler.get_results_filenames(cellset_names)[n],
+            files_handler.get_results_filenames(cellset_names)[nfile],
             read_only=False,
         )
         n = select_cell.options.index(select_cell.value)
