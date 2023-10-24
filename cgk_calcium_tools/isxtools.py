@@ -6,7 +6,6 @@ import isx
 from datetime import datetime
 import json
 from typing import Union, Tuple
-import warnings
 
 def ifstr2list(x)->list:
     if isinstance(x, list):
@@ -289,11 +288,11 @@ class isx_files_handler:
         Parameters
         ----------
         op : str
-            _description_
+            Preprocessing operation to run
         overwrite : bool, optional
-            _description_, by default False
+            Remove results and recompute them, by default False
         verbose : bool, optional
-            _description_, by default False
+            Show additional messages, by default False
         """
         pairlist = self.get_pair_filenames(op)
         
@@ -411,9 +410,30 @@ class isx_files_handler:
                 input_files_keys=['input_movie_files'], 
                 output_file_key='output_movie_files')
 
-    def extract_cells(self, alg, overwrite=False, verbose=False,
-        cells_params=None, detection_params=None, accept_reject_params=None,
-        multiplane_params=None):
+    def extract_cells(self, alg:str, overwrite:bool=False, verbose:bool=False,
+        cells_params:Union[dict,None]=None, detection_params:Union[dict,None]=None,
+        accept_reject_params:Union[dict,None]=None,
+         multiplane_params:Union[dict,None]=None)->None:
+        """This function run a cell extraction algorithm, detect events, auto accept_reject and 
+        multiplane registration
+
+        Parameters
+        ----------
+        alg : str
+            Cell extraction algorithm: 'cnmfe' or 'pca-ica'
+        overwrite : bool, optional
+            Force compute everything again, by default False
+        verbose : bool, optional
+            Show additional messages, by default False
+        cells_params : Union[dict,None], optional
+            Parameters for cell extraction, by default None
+        detection_params : Union[dict,None], optional
+            Parameters for event detection, by default None
+        accept_reject_params : Union[dict,None], optional
+            Parameters for automatic accept_reject cell, by default None
+        multiplane_params : Union[dict,None], optional
+            Parameters for multiplane registration, by default None
+        """
         assert alg in ['pca-ica','cnmfe'],"alg must be 'pca-ica' or 'cnmfe'."
         
         #extract cells
@@ -432,6 +452,16 @@ class isx_files_handler:
         else:
             raise "alg must be 'pca-ica' or 'cnmfe'."
         cellsets = self.get_results_filenames(f"{alg}", op=None)
+
+        if overwrite:
+            for fout in cellsets:
+                if os.path.exists(fout):
+                    os.remove(fout)
+                    json_file = json_filename(fout)
+                    if os.path.exists(json_file):
+                        os.remove(json_file)
+
+
         for input, output in zip(inputs_files, cellsets):
             new_data = {'input_movie_files': input, 'output_cell_set_files': output}
             parameters.update(new_data)
@@ -441,14 +471,17 @@ class isx_files_handler:
             cell_det_fn(**del_key(parameters,'comments'))
 
             if not os.path.exists(output):
-                warnings.warn(f"Algorithm {alg}, failed to create file: {output}.\n" +
+                print(f"Warning: Algorithm {alg}, failed to create file: {output}.\n" +
                                 "Empty cellmap created with its place")
-                movie = isx.Movie.read('recording_20160613_105808-PP-PP.isxd')
+                movie = isx.Movie.read(input)
                 cell_set = isx.CellSet.write(output, movie.timing, movie.spacing)
+                image_null = np.zeros(cell_set.spacing.num_pixels).astype(np.float32)
+                trace_null = np.zeros(cell_set.timing.num_samples).astype(np.float32)
+                cell_set.set_cell_data(0, image_null, trace_null, '')
                 cell_set.flush()
-                del movie
                 del cell_set
-                
+                del movie
+
             write_log_file(parameters, {'function':alg},
                 input_files_keys = ['input_movie_files'], 
                 output_file_key = 'output_cell_set_files')
@@ -469,7 +502,16 @@ class isx_files_handler:
             if same_json_or_remove(ed_parameters, output=output, verbose=verbose,
                 input_files_keys=['input_cell_set_files']):
                 continue
-            isx.event_detection(**del_key(ed_parameters,'comments'))
+            try:
+                isx.event_detection(**del_key(ed_parameters,'comments'))
+            except Exception as e:
+                print(f"Warning: Event_detection, failed to create file: {output}.\n" +
+                                "Empty file created with its place")
+                cell_set = isx.CellSet.read(input)
+                evset = isx.EventSet.write(output, cell_set.timing, [''])
+                evset.flush()
+                del evset
+                del cell_set
             write_log_file(ed_parameters,{'function':'event_detection'},
                         input_files_keys = ['input_cell_set_files'],
                         output_file_key ='output_event_set_files')
@@ -491,66 +533,105 @@ class isx_files_handler:
             new_data = {'input_cell_set_files':input_cs,
                         'input_event_set_files':input_ev}
             ar_parameters.update(new_data) 
-
-            isx.auto_accept_reject(**del_key(ar_parameters,'comments'))
+            try:
+                isx.auto_accept_reject(**del_key(ar_parameters,'comments'))
+            except Exception as e:
+                if verbose:
+                    print(e)
             write_log_file(ar_parameters,{'function':'accept_reject','config_json':config_json},
                 input_files_keys=['input_cell_set_files','input_event_set_files'],
                 output_file_key='config_json')
         if verbose:
             print('accept reject cells, done')
 
-        if [True for x in self.focus_files.values() if len(x)>1]:
-            #multiplane_registration
+        if len([True for x in self.focus_files.values() if len(x)>1])==0:
+            return
+        #multiplane_registration
+        if verbose:
             print('Starting multiplane registration:...')
-            parameters = self.default_parameters['multiplane_registration'].copy() 
-            if multiplane_params is not None:
-                for key, value in multiplane_params.items():
-                    assert key in parameters, f'The parameter: {key} does not exist'
-                    parameters[key] = value
+        parameters = self.default_parameters['multiplane_registration'].copy() 
+        if multiplane_params is not None:
+            for key, value in multiplane_params.items():
+                assert key in parameters, f'The parameter: {key} does not exist'
+                parameters[key] = value
+        
+        for main_file,single_planes in self.focus_files.items():
+            if len(single_planes)==1: #doesn't have multiplane
+                continue
+            input_cell_set_files = self.get_results_filenames(f"{alg}", op=None, 
+                            idx=[self.p_rec_paths.index(f) for f in single_planes])
+            idx = [self.rec_paths.index(main_file)]
+            output_cell_set_file = self.get_results_filenames(f"{alg}", op=None,
+                            idx=idx, proccesing=False)[0]
+            ed_file = self.get_results_filenames(f"{alg}-ED", op=None, 
+                            idx=idx, proccesing=False)[0]
+            ar_cell_set_file = self.get_results_filenames(f"{alg}-accept_reject", 
+                        op=None, idx=idx, proccesing=False)[0]
+
             
-            for main_file,single_planes in self.focus_files.items():
-                if len(single_planes)==1: #doesn't have multiplane
-                    continue
-                input_cell_set_files = self.get_results_filenames(f"{alg}", op=None, 
-                                idx=[self.p_rec_paths.index(f) for f in single_planes])
-                idx = [self.rec_paths.index(main_file)]
-                output_cell_set_file = self.get_results_filenames(f"{alg}", op=None,
-                                idx=idx, proccesing=False)[0]
-                ed_file = self.get_results_filenames(f"{alg}-ED", op=None, 
-                                idx=idx, proccesing=False)[0]
-                ar_cell_set_file = self.get_results_filenames(f"{alg}-accept_reject", 
-                            op=None, idx=idx, proccesing=False)[0]
+            new_data = {'input_cell_set_files': input_cell_set_files,
+                        'output_cell_set_file': output_cell_set_file}
+            mpr_parameters=self.default_parameters['multiplane_registration'].copy()
+            mpr_parameters.update(new_data) 
 
-                
-                new_data = {'input_cell_set_files': input_cell_set_files,
-                            'output_cell_set_file': output_cell_set_file}
-                mpr_parameters=self.default_parameters['multiplane_registration'].copy()
-                mpr_parameters.update(new_data) 
+            if same_json_or_remove(mpr_parameters, output=output_cell_set_file,
+                verbose=verbose, input_files_keys=['input_cell_set_files']):
+                continue
+
+            try:
                 isx.multiplane_registration(**del_key(mpr_parameters,'comments'))
-                write_log_file(mpr_parameters,{'function': 'multiplane_registration'},
-                    input_files_keys = 'input_cell_set_files', 
-                    output_file_key ='output_cell_set_file')
+            except Exception as e:
+                # Code to handle the exception
+                print(f"Exception: {e}")
 
-                new_data = {'input_cell_set_files': output_cell_set_file, 
-                            'output_event_set_files': ed_file}
-                ed_parameters.update(new_data) 
-                if same_json_or_remove(ed_parameters, output=output, verbose=verbose,
-                    input_files_keys=['input_cell_set_files']):
-                    continue
+                if not os.path.exists(output_cell_set_file):
+                    print(f"Warning: File: {output_cell_set_file} not generated.\n" +
+                                    "Empty cellmap created in its place")
+                    cell_set_plane = isx.CellSet.read(input_cell_set_files[0])
+                    cell_set = isx.CellSet.write(output_cell_set_file, cell_set_plane.timing, cell_set_plane.spacing)
+                    image_null = np.zeros(cell_set.spacing.num_pixels,dtype=np.float32)
+                    trace_null = np.zeros(cell_set.timing.num_samples,dtype=np.float32)
+                    cell_set.set_cell_data(0, image_null, trace_null, '')
+                    cell_set.flush()
+                    del cell_set
+                    del cell_set_plane
+
+            write_log_file(mpr_parameters,{'function': 'multiplane_registration'},
+                                input_files_keys = 'input_cell_set_files', 
+                                output_file_key ='output_cell_set_file')
+            new_data = {'input_cell_set_files': output_cell_set_file, 
+                        'output_event_set_files': ed_file}
+            ed_parameters.update(new_data) 
+            if same_json_or_remove(ed_parameters, output=ed_file, verbose=verbose,
+                input_files_keys=['input_cell_set_files']):
+                continue
+            try:
                 isx.event_detection(**del_key(ed_parameters,'comments'))
-                write_log_file(ed_parameters,{'function','event_detection'},
-                    input_files_keys = ['input_cell_set_files'], 
-                    output_file_key ='output_event_set_files')
+            except Exception as e:
+                print(f"Warning: Event_detection, failed to create file: {ed_file}.\n" +
+                                "Empty file created with its place")
+                cell_set = isx.CellSet.read(output_cell_set_file)
+                evset = isx.EventSet.write(ed_file, cell_set.timing, [''])
+                evset.flush()
+                del evset
+                del cell_set
+            
+            write_log_file(ed_parameters,{'function':'event_detection'},
+                input_files_keys = ['input_cell_set_files'], 
+                output_file_key ='output_event_set_files')
 
-                new_data = {'input_cell_set_files': output_cell_set_file,
-                        'input_event_set_files': ed_file}
-                ar_parameters.update(new_data) 
-
+            new_data = {'input_cell_set_files': output_cell_set_file,
+                    'input_event_set_files': ed_file}
+            ar_parameters.update(new_data) 
+            try:
                 isx.auto_accept_reject(**del_key(ar_parameters,'comments'))
-                write_log_file(ar_parameters,{'function':'accept_reject','config_json':ar_cell_set_file},
-                    input_files_keys = ['input_cell_set_files','input_event_set_files'],
-                    output_file_key ='config_json')
-            print('done')
+            except Exception as e:
+                if verbose:
+                    print(e)
+            write_log_file(ar_parameters,{'function':'accept_reject','config_json':ar_cell_set_file},
+                input_files_keys = ['input_cell_set_files','input_event_set_files'],
+                output_file_key ='config_json')
+        print('done')
                 
 
 
@@ -720,12 +801,16 @@ def write_log_file(params, extra_params={}, input_files_keys = ['input_movie_fil
     if not isinstance(input_files_keys,list):
         input_files_keys = [input_files_keys]
     temp_date_str = ''    
-    for inputs_files_key in input_files_keys:
-        input_json = json_filename(data[inputs_files_key])
-        if os.path.exists(input_json):
-            with open(input_json) as file:
-                input_data = json.load(file)
-            temp_date_str= max(input_data['date'], temp_date_str)
+    for input_file_key in input_files_keys:
+        input_files = data[input_file_key]
+        if not isinstance(input_files,list):
+            input_files = [input_files]
+            for input_file in input_files:
+                input_json = json_filename(input_file)
+                if os.path.exists(input_json):
+                    with open(input_json) as file:
+                        input_data = json.load(file)
+                    temp_date_str= max(input_data['date'], temp_date_str)
     data['input_modification_date'] = temp_date_str
     data['date']= actual_date.strftime("%Y-%m-%d %H:%M:%S")
     with open(log_path, 'w') as file:
