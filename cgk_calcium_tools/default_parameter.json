@@ -4,7 +4,8 @@
         "spatial_downsample_factor":1, 
         "crop_rect":null,
         "fix_defective_pixels":true, 
-        "trim_early_frames":true
+        "trim_early_frames":true,
+        "fix_frames_th_std":20
     },
     "spatial_filter": {
         "low_cutoff":0.005,
@@ -14,8 +15,8 @@
     },
     "motion_correct": {
         "max_translation":20,
-        "low_bandpass_cutoff":0.004, 
-        "high_bandpass_cutoff":0.016, 
+        "low_bandpass_cutoff":null, 
+        "high_bandpass_cutoff":null, 
         "roi":null,
         "reference_segment_index":0, 
         "reference_frame_index":0, 

@@ -6,6 +6,9 @@ import isx
 from datetime import datetime
 import json
 from typing import Union, Tuple
+from .processing import fix_frames
+import pandas as pd 
+
 
 def ifstr2list(x)->list:
     if isinstance(x, list):
@@ -148,22 +151,40 @@ class isx_files_handler:
                 self.p_rec_paths.extend(self.focus_files[rec])
             self.p_outputsfolders.extend([self.outputsfolders[i]]*len(efocus))
 
+    def get_raw_movies_info(self)->pd.DataFrame:
+        video_data = []
+        for file in self.rec_names:
+            movie = isx.Movie.read(file)
+            video_data.append(
+                {
+                    "Resolution": movie.spacing.num_pixels,
+                    "Duration (s)": movie.timing.num_samples * 
+                        movie.timing.period.to_msecs() / 1000,
+                    "Sampling Rate (Hz)": 1 / (movie.timing.period.to_msecs() / 1000),
+                    "Full Path": Path(file),
+                    "Main Name": str(Path(file).name),
+                    "Subfolder": str(Path(file).parent.name),
+                }
+            )
+            del movie
+        return pd.DataFrame(video_data)
+
+
     def de_interleave(self, overwrite:bool=False)->None:
         print('de_interleaving movies, please wait...')
         for (main_file,planes_fs), focus in zip(self.focus_files.items(), self.efocus):
             if len(focus)>1: #has multiplane
-                sp_file2do = []
-                planes2do = []
-                for sp_file, single_plane in zip(planes_fs, focus):
+                existing_files = []
+                for sp_file in planes_fs:
                     if os.path.exists(sp_file):
                         if overwrite:
                             os.remove(sp_file)
                         else:
-                            continue
-                    sp_file2do.append(sp_file)
-                    planes2do.append(single_plane)
-                if len(sp_file2do)>0: #has files to run
-                    isx.de_interleave(main_file, sp_file2do, planes2do)
+                            existing_files.append(sp_file)
+                if len(existing_files)!=len(planes_fs): #has files to run
+                    for f in existing_files: #remove existing planes
+                        os.remove(f)
+                    isx.de_interleave(main_file, planes_fs, focus)
         print('done')
 
     def get_pair_filenames(self, operation:str)->Tuple[list,list]:
@@ -375,7 +396,7 @@ class isx_files_handler:
             if same_json_or_remove(parameters, input_files_keys=['input_movie_files'],
                 output=output, verbose=verbose):
                 continue
-            isx.project_movie(**del_key(parameters,'comments'))
+            isx.project_movie(**del_keys(parameters,['comments']))
             write_log_file(parameters,{'function':'project_movie'},
                 input_files_keys=['input_movie_files'], 
                 output_file_key='output_image_file')
@@ -405,7 +426,7 @@ class isx_files_handler:
             if same_json_or_remove(parameters, input_files_keys=['input_movie_files'],
                 output=output, verbose=verbose):
                 continue
-            isx.dff(**del_key(parameters,'comments'))
+            isx.dff(**del_keys(parameters,['comments']))
             write_log_file(parameters,{'function':'dff'},
                 input_files_keys=['input_movie_files'], 
                 output_file_key='output_movie_files')
@@ -414,8 +435,8 @@ class isx_files_handler:
         cells_params:Union[dict,None]=None, detection_params:Union[dict,None]=None,
         accept_reject_params:Union[dict,None]=None,
          multiplane_params:Union[dict,None]=None)->None:
-        """This function run a cell extraction algorithm, detect events, auto accept_reject and 
-        multiplane registration
+        """This function run a cell extraction algorithm, detect events, 
+        auto accept_reject and multiplane registration
 
         Parameters
         ----------
@@ -468,7 +489,7 @@ class isx_files_handler:
             if same_json_or_remove(parameters,input_files_keys=['input_movie_files'],
                 output=output, verbose=verbose):
                 continue
-            cell_det_fn(**del_key(parameters,'comments'))
+            cell_det_fn(**del_keys(parameters,['comments']))
 
             if not os.path.exists(output):
                 print(f"Warning: Algorithm {alg}, failed to create file: {output}.\n" +
@@ -503,7 +524,7 @@ class isx_files_handler:
                 input_files_keys=['input_cell_set_files']):
                 continue
             try:
-                isx.event_detection(**del_key(ed_parameters,'comments'))
+                isx.event_detection(**del_keys(ed_parameters,['comments']))
             except Exception as e:
                 print(f"Warning: Event_detection, failed to create file: {output}.\n" +
                                 "Empty file created with its place")
@@ -534,7 +555,7 @@ class isx_files_handler:
                         'input_event_set_files':input_ev}
             ar_parameters.update(new_data) 
             try:
-                isx.auto_accept_reject(**del_key(ar_parameters,'comments'))
+                isx.auto_accept_reject(**del_keys(ar_parameters,['comments']))
             except Exception as e:
                 if verbose:
                     print(e)
@@ -579,7 +600,7 @@ class isx_files_handler:
                 continue
 
             try:
-                isx.multiplane_registration(**del_key(mpr_parameters,'comments'))
+                isx.multiplane_registration(**del_keys(mpr_parameters,['comments']))
             except Exception as e:
                 # Code to handle the exception
                 print(f"Exception: {e}")
@@ -606,7 +627,7 @@ class isx_files_handler:
                 input_files_keys=['input_cell_set_files']):
                 continue
             try:
-                isx.event_detection(**del_key(ed_parameters,'comments'))
+                isx.event_detection(**del_keys(ed_parameters,['comments']))
             except Exception as e:
                 print(f"Warning: Event_detection, failed to create file: {ed_file}.\n" +
                                 "Empty file created with its place")
@@ -624,7 +645,7 @@ class isx_files_handler:
                     'input_event_set_files': ed_file}
             ar_parameters.update(new_data) 
             try:
-                isx.auto_accept_reject(**del_key(ar_parameters,'comments'))
+                isx.auto_accept_reject(**del_keys(ar_parameters,['comments']))
             except Exception as e:
                 if verbose:
                     print(e)
@@ -715,7 +736,7 @@ def motion_correct_step(translation_files,crop_rect_files,
                     'output_crop_rect_file': crop_rect_files[i]
                     }
         parameters.update(new_data)
-        isx.motion_correct(**del_key(parameters,'comments'))
+        isx.motion_correct(**del_keys(parameters,['comments']))
         write_log_file(parameters, {'function':'motion_correct'},
             input_files_keys = ['input_movie_files'], 
             output_file_key = 'output_movie_files')
@@ -741,11 +762,13 @@ def preprocess_step(pairlist, parameters, verbose = False):
         if same_json_or_remove(parameters, input_files_keys=['input_movie_files'],
             output=output, verbose=verbose):
             continue
-        isx.preprocess(**del_key(parameters,'comments'))
+        isx.preprocess(**del_keys(parameters,['comments','fix_frames_th_std']))
+        nfixed = fix_frames(output,std_th=parameters['fix_frames_th_std'], report=True)
+
         write_log_file(parameters,{'function':'preprocess'},
             input_files_keys = ['input_movie_files'], output_file_key = 'output_movie_files')
         if verbose:
-            print("{} preprocessing completed".format(output))  
+            print("{} preprocessing completed. {} frames fixed.".format(output,nfixed))
                 
 def spatial_filter_step(list, parameters, verbose = False):
     for input, output in list:      
@@ -753,7 +776,7 @@ def spatial_filter_step(list, parameters, verbose = False):
         if same_json_or_remove(parameters, input_files_keys = ['input_movie_files'],
             output=output, verbose=verbose):
             continue
-        isx.spatial_filter(**del_key(parameters,'comments'))
+        isx.spatial_filter(**del_keys(parameters,['comments']))
         write_log_file(parameters, {'function':'spatial_filter'},
             input_files_keys = ['input_movie_files'], output_file_key = 'output_movie_files')
         if verbose:
@@ -772,7 +795,7 @@ def trim_movie(pairlist, user_parameters, verbose = False):
         if same_json_or_remove(parameters, input_files_keys = ['input_movie_file'],
             output=output, verbose=verbose):
             continue
-        isx.trim_movie(**del_key(parameters,'comments'))
+        isx.trim_movie(**del_keys(parameters,['comments']))
         if verbose:
             print('{} trimming completed'.format(output))
         write_log_file(parameters, {'function':'trimming'},
@@ -862,9 +885,9 @@ def same_json_or_remove(parameters:dict, input_files_keys:list,
 def json_filename(filename:str)->str:
     return os.path.splitext(filename)[0]+'.json'
 
-def del_key(d:dict,key:str)->dict:
-    if key in d:
-        copy_dict = d.copy()
-        del copy_dict[key]
-        return copy_dict
-    return d
+def del_keys(d:dict, keys:list)->dict:
+    copy_dict = d.copy()
+    for key in keys:
+        if key in d:
+            del copy_dict[key]
+    return copy_dict

@@ -14,5 +14,5 @@ Cells can be accepted and rejected manually
 ### Requirements
 
 
-- Python >= 3.10
+- Python >= 3.9
 - isx (Inscopix API) >= 1.9.2
