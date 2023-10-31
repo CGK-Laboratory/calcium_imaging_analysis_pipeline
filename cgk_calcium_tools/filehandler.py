@@ -27,7 +27,7 @@ class isx_files_handler:
         and files_pattern.
     data_subfolders : list
         Where each file (or files) following each files_pattern element are.
-    files_pattern : list
+    files_patterns : list
         Naming patterns for the files, and easy way to handle selection of one or 
         multiple files from the same folder.
     outputsfolders : list
@@ -46,7 +46,7 @@ class isx_files_handler:
         main_data_folder:Union[str, list]='.',
         outputsfolders:Union[str, list]='.',
         data_subfolders:Union[str, list]='.',
-        files_pattern:Union[str, list]='.isx',
+        files_patterns:Union[str, list]='.isx',
         processing_steps:list=["PP", "TR", "BP", "MC"],
         one_file_per_folder:bool=True,
         recording_labels:Union[str, None]=None,
@@ -59,7 +59,7 @@ class isx_files_handler:
             'main_data_folder': ifstr2list(main_data_folder),
             'outputsfolders': ifstr2list(outputsfolders),
             'data_subfolders': ifstr2list(data_subfolders),
-            'files_pattern': ifstr2list(files_pattern)
+            'files_patterns': ifstr2list(files_patterns)
         }
         len_list_variables = np.unique([len(v) for v in lists_inputs.values()])
         len_list_variables = len_list_variables[len_list_variables>1]
@@ -79,7 +79,7 @@ class isx_files_handler:
         self.outputsfolders  = []
         self.rec_paths = []
         for mainf,f,fpatter,outf in zip(lists_inputs['main_data_folder'],
-            lists_inputs['data_subfolders'],lists_inputs['files_pattern'],
+            lists_inputs['data_subfolders'],lists_inputs['files_patterns'],
             lists_inputs['outputsfolders']):
 
             files = glob(str(Path(mainf)/f/fpatter), recursive=False)
@@ -120,9 +120,12 @@ class isx_files_handler:
         self.focus_files = {}
         self.efocus = []
         for i, rec in enumerate(self.rec_paths):
-            gpio_file = os.path.splitext(rec)[0]+ '_gpio.isxd'
-            if os.path.exists(gpio_file):
-                efocus = get_efocus(gpio_file)
+            raw_gpio_file = os.path.splitext(rec)[0]+ '.gpio' #raw data for gpio
+            updated_gpio_file = os.path.splitext(rec)[0]+  '_gpio.isxd' #after the first reading gpio is converted to this
+            if os.path.exists(updated_gpio_file):
+                efocus = get_efocus(updated_gpio_file)
+            elif os.path.exists(raw_gpio_file):
+                 efocus = get_efocus(raw_gpio_file)
             else:
                 video= isx.Movie.read(rec)
                 get_acquisition_info= video.get_acquisition_info().copy()
