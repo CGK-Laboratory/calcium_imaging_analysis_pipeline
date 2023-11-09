@@ -8,7 +8,7 @@ import json
 from typing import Union, Tuple
 from .processing import fix_frames
 import pandas as pd 
-
+import shutil
 
 def ifstr2list(x)->list:
     if isinstance(x, list):
@@ -122,10 +122,15 @@ class isx_files_handler:
         for i, rec in enumerate(self.rec_paths):
             raw_gpio_file = os.path.splitext(rec)[0]+ '.gpio' #raw data for gpio
             updated_gpio_file = os.path.splitext(rec)[0]+  '_gpio.isxd' #after the first reading gpio is converted to this
-            if os.path.exists(updated_gpio_file):
+            local_updated_gpio_file = str(self.outputsfolders[i]/ Path(updated_gpio_file).name)  #new gpio copied in output
+            if os.path.exists(local_updated_gpio_file):
+                efocus = get_efocus(local_updated_gpio_file)
+            elif os.path.exists(updated_gpio_file):
                 efocus = get_efocus(updated_gpio_file)
             elif os.path.exists(raw_gpio_file):
-                 efocus = get_efocus(raw_gpio_file)
+                local_raw_gpio_file = str(self.outputsfolders[i]/ Path(raw_gpio_file).name)
+                shutil.copy2(raw_gpio_file,local_raw_gpio_file)
+                efocus = get_efocus(local_raw_gpio_file)
             else:
                 video= isx.Movie.read(rec)
                 get_acquisition_info= video.get_acquisition_info().copy()
@@ -156,7 +161,7 @@ class isx_files_handler:
 
     def get_raw_movies_info(self)->pd.DataFrame:
         video_data = []
-        for file in self.rec_names:
+        for file in self.rec_paths:
             movie = isx.Movie.read(file)
             video_data.append(
                 {
@@ -729,7 +734,7 @@ def get_segment_from_movie(inputfile, outputfile, borders,
     )
 
 def motion_correct_step(translation_files,crop_rect_files, 
-                        parameters, op, pairlist, verbose = False)->None:
+                        parameters, pairlist, verbose = False)->None:
     for i, (input, output) in enumerate(pairlist):
         if same_json_or_remove(parameters, input_files_keys=['input_movie_files'],
             output=output, verbose=verbose):
