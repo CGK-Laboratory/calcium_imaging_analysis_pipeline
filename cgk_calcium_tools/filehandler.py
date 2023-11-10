@@ -50,11 +50,28 @@ class isx_files_handler:
         processing_steps:list=["PP", "TR", "BP", "MC"],
         one_file_per_folder:bool=True,
         recording_labels:Union[str, None]=None,
+        files_list_log:Union[str, None]=None,
         parameters_path:str=
             os.path.join(os.path.dirname(__file__),'default_parameter.json')
     )->None: 
 
-        
+        self.processing_steps = processing_steps
+
+        if files_list_log is not None:
+            input_parameters={'main_data_folder':main_data_folder,
+                'outputsfolders':outputsfolders,
+                'data_subfolders':data_subfolders,
+                'files_patterns':files_patterns,
+                'one_file_per_folder':one_file_per_folder,
+                'recording_labels':recording_labels}
+            if os.path.exists(files_list_log):
+                with open(files_list_log, 'r') as file:
+                    file_handler_status = json.load(file)
+
+                if file_handler_status['input_parameters']==input_parameters:
+                    self.__dict__.update(file_handler_status['computed_parameters']) 
+                return
+
         lists_inputs = {
             'main_data_folder': ifstr2list(main_data_folder),
             'outputsfolders': ifstr2list(outputsfolders),
@@ -89,19 +106,18 @@ class isx_files_handler:
                     str(Path(mainf) / f / fpatter)
                 )
                 self.rec_paths.append(files[0])
-                self.outputsfolders.append(Path(outf)/f)
+                self.outputsfolders.append(str(Path(outf)/f))
             else:
                 assert len(files) > 0, "No file found for {}.".format(
                     str(Path(mainf) / f / fpatter)
                 )
                 rec2add = [r for r in files if f not in self.rec_paths]
                 self.rec_paths.extend(rec2add)
-                self.outputsfolders.extend([Path(outf)/f for r in rec2add])
+                self.outputsfolders.extend([str(Path(outf)/f) for r in rec2add])
 
         for ofolder in self.outputsfolders:
             os.makedirs(ofolder, exist_ok=True)
 
-        self.processing_steps = processing_steps
         if recording_labels is None:
             self.recording_labels = self.rec_paths
         else:
@@ -122,13 +138,14 @@ class isx_files_handler:
         for i, rec in enumerate(self.rec_paths):
             raw_gpio_file = os.path.splitext(rec)[0]+ '.gpio' #raw data for gpio
             updated_gpio_file = os.path.splitext(rec)[0]+  '_gpio.isxd' #after the first reading gpio is converted to this
-            local_updated_gpio_file = str(self.outputsfolders[i]/ Path(updated_gpio_file).name)  #new gpio copied in output
+            local_updated_gpio_file = os.path.join(self.outputsfolders[i],
+                    Path(updated_gpio_file).name)  #new gpio copied in output
             if os.path.exists(local_updated_gpio_file):
                 efocus = get_efocus(local_updated_gpio_file)
             elif os.path.exists(updated_gpio_file):
                 efocus = get_efocus(updated_gpio_file)
             elif os.path.exists(raw_gpio_file):
-                local_raw_gpio_file = str(self.outputsfolders[i]/ Path(raw_gpio_file).name)
+                local_raw_gpio_file = os.path.join(self.outputsfolders[i], Path(raw_gpio_file).name)
                 shutil.copy2(raw_gpio_file,local_raw_gpio_file)
                 efocus = get_efocus(local_raw_gpio_file)
             else:
@@ -152,12 +169,29 @@ class isx_files_handler:
                 self.efocus.append(efocus)
                 pr = Path(rec)
                 efocus_filenames = [pr.stem + '_'+ str(ef) + pr.suffix for ef in efocus]
-                self.focus_files[rec]=[str(self.outputsfolders[i]/ef)  
+                self.focus_files[rec]=[str(self.outputsfolders[i]/Path(ef))  
                                             for ef in efocus_filenames]
                 self.p_recording_labels.extend([self.recording_labels[i]+f'_{ef}'
                                                     for ef in efocus])
                 self.p_rec_paths.extend(self.focus_files[rec])
             self.p_outputsfolders.extend([self.outputsfolders[i]]*len(efocus))
+        
+        if files_list_log is not None:
+            file_handler_status={
+                'input_parameters':input_parameters,  
+                'computed_parameters':{
+                    'rec_subfolders':self.rec_subfolders,
+                    'outputsfolders':self.outputsfolders,
+                    'recording_labels':self.recording_labels,
+                    'rec_paths':self.rec_paths,
+                    'p_rec_paths':self.p_rec_paths,
+                    'p_outputsfolders':self.p_outputsfolders,
+                    'p_recording_labels':self.p_recording_labels,
+                    'focus_files':self.focus_files, 
+                    'efocus':self.efocus,
+                }}
+            with open(files_list_log, 'w') as file:
+                json.dump(file_handler_status, file)
 
     def get_raw_movies_info(self)->pd.DataFrame:
         video_data = []
@@ -817,7 +851,7 @@ def get_efocus(gpio_file):
     min_frames_per_efocus = 100
     video_efocus = efocus_values[efocus_counts>=min_frames_per_efocus]
     assert video_efocus.shape[0] < 4, f'{gpio_file}: Too many efocus detected, early frames issue.'
-    return list(video_efocus.astype(int))
+    return [int(v) for v in video_efocus]
 
 def write_log_file(params, extra_params={}, input_files_keys = ['input_movie_files'],
     output_file_key = 'output_movie_files'):
