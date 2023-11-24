@@ -76,6 +76,6 @@
         "accepted_cells_only":false
     },
     "project_movie": {
-        "stat_type":"mean"
+        "stat_type":"max"
     }
 }

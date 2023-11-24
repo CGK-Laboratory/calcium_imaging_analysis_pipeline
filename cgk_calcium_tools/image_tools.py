@@ -2,14 +2,42 @@ import numpy as np
 import matplotlib.pyplot as plt
 import isx 
 
+def plot_grid_max_dff_and_cellmap_fh(
+    fh,
+    ncols=5,
+    eqhist=True,
+    cellsetname="pca-ica",
+    status_list=["accepted", "rejected", "undecided"],
+    colors=['red','green', 'black'],
+    before_registration:bool=True):
+
+    if before_registration:
+        nfigures = len(fh.p_rec_paths)
+        labels = fh.p_recording_labels
+    else:
+        nfigures = len(fh.rec_paths)
+        labels = fh.recording_labels
+
+    nrows = np.ceil(nfigures/ncols).astype(int)
+    for i in range(nfigures):
+        plt.subplot(nrows,ncols, i+1)
+        plot_max_dff_and_cellmap_fh(
+            fh, idx=i,
+            eqhist=True, cellsetname=cellsetname,
+            status_list=status_list, colors=colors,
+            op=None, before_registration=before_registration
+        )
+        plt.title(labels[i])
+    plt.tight_layout()
 def plot_max_dff_and_cellmap_fh(
     files_handler,
     idx=0,
     eqhist=True,
-    cellsetname="cnmfe-cellset",
+    cellsetname="pca-ica",
     status_list=["accepted", "rejected", "undecided"],
     colors=['red','green', 'black'],
-    op=None
+    op=None,
+    before_registration:bool=True
 ):
     """
     This function plots the maxdff figure (with an optional transformation) and adds the "borders" of the cell map
@@ -28,8 +56,17 @@ def plot_max_dff_and_cellmap_fh(
         Colors of each status. Default: ['red','green', 'black']
 
     """
-    dataset = files_handler.get_results_filenames(cellsetname, op=op, idx=[idx])[0]
-    maxdff = files_handler.get_results_filenames("maxdff", op=op, idx=[idx])[0]
+    if not before_registration:
+        dataset = files_handler.get_results_filenames(cellsetname, op=op, idx=[idx], proccesing=False)[0]
+        #choose the plane to show, the closest to the mean efocus
+        media = np.mean(files_handler.efocus[idx])
+        local_efocus_idx = np.argmin(np.abs(np.array(files_handler.efocus[idx]) - media)) 
+        efocus_file = files_handler.focus_files[files_handler.rec_paths[idx]][local_efocus_idx]
+        efocus_idx = files_handler.p_rec_paths.index(efocus_file)
+        maxdff = files_handler.get_results_filenames("maxdff", op=op, idx=[efocus_idx], proccesing=True)[0]
+    else:
+        dataset = files_handler.get_results_filenames(cellsetname, op=op, idx=[idx], proccesing=True)[0]
+        maxdff = files_handler.get_results_filenames("maxdff", op=op, idx=[idx], proccesing=True)[0]
     plot_max_dff_and_cellmap(dataset, maxdff, eqhist, status_list,colors=colors)
 
 
@@ -74,7 +111,8 @@ def plot_max_dff_and_cellmap(
             )
 
     cell_set.flush()
-
+    plt.xticks([])
+    plt.yticks([])
 
 def eqhist_tf(im, nbins=256):
     """
