@@ -56,7 +56,10 @@ class isx_files_handler:
     )->None: 
 
         self.processing_steps = processing_steps
-
+        assert os.path.exists(parameters_path), 'parameters file does not exist'
+        with open(parameters_path) as file:
+            self.default_parameters= json.load(file) 
+            
         if files_list_log is not None:
             input_parameters={'main_data_folder':main_data_folder,
                 'outputsfolders':outputsfolders,
@@ -124,10 +127,6 @@ class isx_files_handler:
             assert len(recording_labels)==len(self.rec_paths), \
                 'Recordings and reconding labels should have same length'
             self.recording_labels = recording_labels
-
-        assert os.path.exists(parameters_path), 'parameters file does not exist'
-        with open(parameters_path) as file:
-            self.default_parameters= json.load(file) 
 
         #Lookig for multiplanes:
         self.p_rec_paths = []
@@ -361,12 +360,7 @@ class isx_files_handler:
         
         if overwrite:
             for _, output in pairlist:
-                if os.path.exists(output):
-                    os.remove(output)
-                json_file = json_filename(output)
-                if os.path.exists(json_file):
-                    os.remove(json_file)
-        
+                remove_file_and_json(output)
         
         steps_list = {'PP':'preprocessing','BP':'spatial_filter',
             'MC':'motion_correct','TR':'trim'}
@@ -397,34 +391,26 @@ class isx_files_handler:
         if op.startswith('MC'):
             print("Applying motion correction. Please wait...")
             actual_idx = self.processing_steps.index(op)
-            if actual_idx != 0:
-                op_prev = self.processing_steps[actual_idx - 1]
-                translation_files = self.get_results_filenames("translations.csv",
-                                                                op=op_prev)
-                crop_rect_files = self.get_results_filenames("crop_rect.csv",
-                                                                op=op_prev)
-            else:
-                assert "Not Implemented"
+            
+            op_prev = self.processing_steps[actual_idx - 1]
+            translation_files = self.get_results_filenames("translations.csv",
+                                                            op=op)
+            crop_rect_files = self.get_results_filenames("crop_rect.csv",
+                                                            op=op)
 
             motion_correct_step(translation_files,crop_rect_files,parameters,
                                 pairlist,verbose) 
         if op.startswith('TR'):
             print('Trim movies...')
             trim_movie(pairlist, parameters , verbose)
-        
-        if verbose:
-            assert False, "Error in operation name"                           
+                                 
         print ('done')
 
     def project_movie(self, input_name:str='dff',output_name:str='maxdff',
                     operation=None,overwrite=False, verbose=False, **kws):
         if overwrite:
             for output in self.get_results_filenames(output_name, op=operation):
-                if os.path.exists(output):
-                    os.remove(output)
-                json_file = json_filename(output)
-                if os.path.exists(json_file):
-                    os.remove(json_file)
+                remove_file_and_json(output)
         parameters = self.default_parameters['project_movie'].copy() 
         
         for key, value in kws.items():
@@ -443,18 +429,10 @@ class isx_files_handler:
                 input_files_keys=['input_movie_files'], 
                 output_file_key='output_image_file')
 
-
-
-
-
     def create_dff(self, overwrite=False, verbose=False, **kws):
         if overwrite:
             for output in self.get_results_filenames("dff", op=None):
-                if os.path.exists(output):
-                    os.remove(output)
-                json_file = json_filename(output)
-                if os.path.exists(json_file):
-                    os.remove(json_file)
+                remove_file_and_json(output)
         parameters = self.default_parameters['dff'].copy() 
         
         for key, value in kws.items():
@@ -770,14 +748,14 @@ def get_segment_from_movie(inputfile, outputfile, borders,
 def motion_correct_step(translation_files,crop_rect_files, 
                         parameters, pairlist, verbose = False)->None:
     for i, (input, output) in enumerate(pairlist):
+        new_data = {'input_movie_files': input, 'output_movie_files': output,
+                    'output_translation_files': translation_files[i],
+                    'output_crop_rect_file': crop_rect_files[i]} 
+        parameters.update(new_data)
         if same_json_or_remove(parameters, input_files_keys=['input_movie_files'],
             output=output, verbose=verbose):
             continue
-        new_data = {'input_movie_files': input, 'output_movie_files': output,
-                    'output_translation_files': translation_files[i],
-                    'output_crop_rect_file': crop_rect_files[i]
-                    }
-        parameters.update(new_data)
+
         isx.motion_correct(**del_keys(parameters,['comments']))
         write_log_file(parameters, {'function':'motion_correct'},
             input_files_keys = ['input_movie_files'], 
@@ -881,12 +859,14 @@ def write_log_file(params, extra_params={}, input_files_keys = ['input_movie_fil
     with open(log_path, 'w') as file:
         json.dump(data, file, indent = 4)
         
-def chek_same_existing_json(parameters, json_file,input_files_keys):
+def chek_same_existing_json(parameters, json_file,input_files_keys,verbose):
     with open(json_file) as file:
         prev_parameters = json.load(file)
     for key, value in parameters.items():
         #only comments can be different
         if key !='comments' and prev_parameters[key] != value:
+            if verbose:
+                print(f'different {key}: old:{prev_parameters[key]}, new:{value}')
             return False
     
     #Check dates for all input files dates are consistent
@@ -902,9 +882,19 @@ def chek_same_existing_json(parameters, json_file,input_files_keys):
                 with open(json_file) as in_file:
                     in_data = json.load(in_file)
                 if prev_parameters['input_modification_date'] > in_data['date']:
+                    old_date = prev_parameters['input_modification_date']
+                    new_date = in_data['date']
+                    print(f'updated file {json_file}: old:{old_date}, new:{new_date}')
                     return False
     return True
 
+
+def remove_file_and_json(output):
+    if os.path.exists(output):
+        os.remove(output)
+    json_file = json_filename(output)
+    if os.path.exists(json_file):
+        os.remove(json_file)
 
 def same_json_or_remove(parameters:dict, input_files_keys:list,
                             output:str, verbose:bool)->bool:
@@ -915,7 +905,7 @@ def same_json_or_remove(parameters:dict, input_files_keys:list,
     json_file = json_filename(output)
     if os.path.exists(json_file):
         if os.path.exists(output):
-            if chek_same_existing_json(parameters, json_file,input_files_keys):
+            if chek_same_existing_json(parameters, json_file,input_files_keys,verbose):
                 if verbose:
                     print(f"File {output} already created with these parameters")
                 return True
