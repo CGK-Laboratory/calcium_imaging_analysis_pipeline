@@ -3,12 +3,13 @@ from pathlib import Path
 from glob import glob
 import numpy as np
 import isx 
-from datetime import datetime
 import json
 from typing import Union, Tuple
 from .processing import fix_frames
 import pandas as pd 
 import shutil
+from .files_io import write_log_file, remove_file_and_json, same_json_or_remove, json_filename
+
 
 def ifstr2list(x)->list:
     if isinstance(x, list):
@@ -57,6 +58,7 @@ class isx_files_handler:
 
         self.processing_steps = processing_steps
         assert os.path.exists(parameters_path), 'parameters file does not exist'
+        assert len([s for s in processing_steps if s.startswith("TR")])<=1,  "Pipeline can't handle multiple trims"
         with open(parameters_path) as file:
             self.default_parameters= json.load(file) 
             
@@ -191,25 +193,6 @@ class isx_files_handler:
                 }}
             with open(files_list_log, 'w') as file:
                 json.dump(file_handler_status, file)
-
-    def get_raw_movies_info(self)->pd.DataFrame:
-        video_data = []
-        for file in self.rec_paths:
-            movie = isx.Movie.read(file)
-            video_data.append(
-                {
-                    "Resolution": movie.spacing.num_pixels,
-                    "Duration (s)": movie.timing.num_samples * 
-                        movie.timing.period.to_msecs() / 1000,
-                    "Sampling Rate (Hz)": 1 / (movie.timing.period.to_msecs() / 1000),
-                    "Full Path": Path(file),
-                    "Main Name": str(Path(file).name),
-                    "Subfolder": str(Path(file).parent.name),
-                }
-            )
-            del movie
-        return pd.DataFrame(video_data)
-
 
     def de_interleave(self, overwrite:bool=False)->None:
         print('de_interleaving movies, please wait...')
@@ -452,9 +435,10 @@ class isx_files_handler:
                 output_file_key='output_movie_files')
 
     def extract_cells(self, alg:str, overwrite:bool=False, verbose:bool=False,
-        cells_params:Union[dict,None]=None, detection_params:Union[dict,None]=None,
+        cells_extr_params:Union[dict,None]=None, detection_params:Union[dict,None]=None,
         accept_reject_params:Union[dict,None]=None,
-         multiplane_params:Union[dict,None]=None)->None:
+        multiplane_params:Union[dict,None]=None,
+        cellsetname:Union[str,None]=None)->None:
         """This function run a cell extraction algorithm, detect events, 
         auto accept_reject and multiplane registration
 
@@ -466,7 +450,7 @@ class isx_files_handler:
             Force compute everything again, by default False
         verbose : bool, optional
             Show additional messages, by default False
-        cells_params : Union[dict,None], optional
+        cells_extr_params : Union[dict,None], optional
             Parameters for cell extraction, by default None
         detection_params : Union[dict,None], optional
             Parameters for event detection, by default None
@@ -479,8 +463,8 @@ class isx_files_handler:
         
         #extract cells
         parameters = self.default_parameters[alg].copy() 
-        if cells_params is not None:
-            for key, value in cells_params.items():
+        if cells_extr_params is not None:
+            for key, value in cells_extr_params.items():
                 assert key in parameters, f'The parameter: {key} does not exist'
                 parameters[key] = value
 
@@ -492,7 +476,9 @@ class isx_files_handler:
             inputs_files = self.get_filenames(op=None)
         else:
             raise "alg must be 'pca-ica' or 'cnmfe'."
-        cellsets = self.get_results_filenames(f"{alg}", op=None)
+        if cellsetname is None:
+            cellsetname = alg
+        cellsets = self.get_results_filenames(f"{cellsetname}", op=None)
 
         if overwrite:
             for fout in cellsets:
@@ -536,7 +522,7 @@ class isx_files_handler:
                 ed_parameters[key] = value
 
         for input, output in zip(cellsets,
-            self.get_results_filenames(f"{alg}-ED", op=None)):
+            self.get_results_filenames(f"{cellsetname}-ED", op=None)):
             
             new_data = {'input_cell_set_files': input, 'output_event_set_files': output}
             ed_parameters.update(new_data) 
@@ -568,8 +554,8 @@ class isx_files_handler:
                 ar_parameters[key] = value
 
         for input_cs, input_ev, config_json in zip(cellsets,
-                self.get_results_filenames(f"{alg}-ED", op=None),
-                self.get_results_filenames(f"{alg}-accept_reject", op=None)):
+                self.get_results_filenames(f"{cellsetname}-ED", op=None),
+                self.get_results_filenames(f"{cellsetname}-accept_reject", op=None)):
 
             new_data = {'input_cell_set_files':input_cs,
                         'input_event_set_files':input_ev}
@@ -599,14 +585,14 @@ class isx_files_handler:
         for main_file,single_planes in self.focus_files.items():
             if len(single_planes)==1: #doesn't have multiplane
                 continue
-            input_cell_set_files = self.get_results_filenames(f"{alg}", op=None, 
+            input_cell_set_files = self.get_results_filenames(f"{cellsetname}", op=None, 
                             idx=[self.p_rec_paths.index(f) for f in single_planes])
             idx = [self.rec_paths.index(main_file)]
-            output_cell_set_file = self.get_results_filenames(f"{alg}", op=None,
+            output_cell_set_file = self.get_results_filenames(f"{cellsetname}", op=None,
                             idx=idx, proccesing=False)[0]
-            ed_file = self.get_results_filenames(f"{alg}-ED", op=None, 
+            ed_file = self.get_results_filenames(f"{cellsetname}-ED", op=None, 
                             idx=idx, proccesing=False)[0]
-            ar_cell_set_file = self.get_results_filenames(f"{alg}-accept_reject", 
+            ar_cell_set_file = self.get_results_filenames(f"{cellsetname}-accept_reject", 
                         op=None, idx=idx, proccesing=False)[0]
 
             
@@ -831,91 +817,6 @@ def get_efocus(gpio_file):
     assert video_efocus.shape[0] < 4, f'{gpio_file}: Too many efocus detected, early frames issue.'
     return [int(v) for v in video_efocus]
 
-def write_log_file(params, extra_params={}, input_files_keys = ['input_movie_files'],
-    output_file_key = 'output_movie_files'):
-    data = {}
-    data.update(params)
-    data.update(extra_params)
-    data['isx_version'] = isx.__version__
-
-    log_path = json_filename(data[output_file_key])
-    actual_date = datetime.utcnow()
-    data['input_modification_date'] = None
-    if not isinstance(input_files_keys,list):
-        input_files_keys = [input_files_keys]
-    temp_date_str = ''    
-    for input_file_key in input_files_keys:
-        input_files = data[input_file_key]
-        if not isinstance(input_files,list):
-            input_files = [input_files]
-            for input_file in input_files:
-                input_json = json_filename(input_file)
-                if os.path.exists(input_json):
-                    with open(input_json) as file:
-                        input_data = json.load(file)
-                    temp_date_str= max(input_data['date'], temp_date_str)
-    data['input_modification_date'] = temp_date_str
-    data['date']= actual_date.strftime("%Y-%m-%d %H:%M:%S")
-    with open(log_path, 'w') as file:
-        json.dump(data, file, indent = 4)
-        
-def chek_same_existing_json(parameters, json_file,input_files_keys,verbose):
-    with open(json_file) as file:
-        prev_parameters = json.load(file)
-    for key, value in parameters.items():
-        #only comments can be different
-        if key !='comments' and prev_parameters[key] != value:
-            if verbose:
-                print(f'different {key}: old:{prev_parameters[key]}, new:{value}')
-            return False
-    
-    #Check dates for all input files dates are consistent
-    for input_file_key in input_files_keys:
-        input_files = parameters[input_file_key]
-
-        if isinstance(input_files,str):
-            input_files = [input_files] #generalize for input fields containing lists
-        
-        for input_file in  input_files:
-            json_file = json_filename(input_file)
-            if os.path.exists(json_file):
-                with open(json_file) as in_file:
-                    in_data = json.load(in_file)
-                if prev_parameters['input_modification_date'] > in_data['date']:
-                    old_date = prev_parameters['input_modification_date']
-                    new_date = in_data['date']
-                    print(f'updated file {json_file}: old:{old_date}, new:{new_date}')
-                    return False
-    return True
-
-
-def remove_file_and_json(output):
-    if os.path.exists(output):
-        os.remove(output)
-    json_file = json_filename(output)
-    if os.path.exists(json_file):
-        os.remove(json_file)
-
-def same_json_or_remove(parameters:dict, input_files_keys:list,
-                            output:str, verbose:bool)->bool:
-    """
-    If the file exist and the json is the same returns True. 
-    Else: removes the file and the json associated with it.
-    """
-    json_file = json_filename(output)
-    if os.path.exists(json_file):
-        if os.path.exists(output):
-            if chek_same_existing_json(parameters, json_file,input_files_keys,verbose):
-                if verbose:
-                    print(f"File {output} already created with these parameters")
-                return True
-        os.remove(json_file)
-    if os.path.exists(output):
-        os.remove(output)
-    return False
-
-def json_filename(filename:str)->str:
-    return os.path.splitext(filename)[0]+'.json'
 
 def del_keys(d:dict, keys:list)->dict:
     copy_dict = d.copy()

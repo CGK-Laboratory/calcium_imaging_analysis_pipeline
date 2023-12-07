@@ -6,7 +6,7 @@ import os
 
 
 def fix_frames(file:str, std_th:Union[None,float]=None, report:bool=True)->int:
-    """Edits inplace a file interpolating its broken frames
+    """It fixes inplace a file interpolating its broken frames
 
     Parameters
     ----------

@@ -9,8 +9,9 @@ def plot_grid_max_dff_and_cellmap_fh(
     cellsetname="pca-ica",
     status_list=["accepted", "rejected", "undecided"],
     colors=['red','green', 'black'],
-    before_registration:bool=True):
-
+    before_registration:bool=True, **figure_kwargs):
+    fig = plt.figure(**figure_kwargs)
+    
     if before_registration:
         nfigures = len(fh.p_rec_paths)
         labels = fh.p_recording_labels
@@ -29,6 +30,7 @@ def plot_grid_max_dff_and_cellmap_fh(
         )
         plt.title(labels[i])
     plt.tight_layout()
+    
 def plot_max_dff_and_cellmap_fh(
     files_handler,
     idx=0,
