@@ -630,10 +630,13 @@ class isx_files_handler:
                     cell_set.flush()
                     del cell_set
                     del cell_set_plane
-
+        
+            mpr_parameters['auto_accept_reject'] = ar_cell_set_file
+            #this registration uses the status of the cells, therefore it depends of the auto accept/reject
             write_log_file(mpr_parameters,{'function': 'multiplane_registration'},
-                                input_files_keys = 'input_cell_set_files', 
-                                output_file_key ='output_cell_set_file')
+                            input_files_keys = ['input_cell_set_files','auto_accept_reject'], 
+                            output_file_key ='output_cell_set_file')
+            #event detection in registered cellset
             new_data = {'input_cell_set_files': output_cell_set_file, 
                         'output_event_set_files': ed_file}
             ed_parameters.update(new_data) 

@@ -22,6 +22,10 @@ def same_json_or_remove(parameters:dict, input_files_keys:list,
     return False
 
 def check_same_existing_json(parameters, json_file,input_files_keys,verbose):
+    """
+    Go through the new parameters checking for diferences. 
+    Missing parameters in new parameters omitted
+    """
     with open(json_file) as file:
         prev_parameters = json.load(file)
     for key, value in parameters.items():
