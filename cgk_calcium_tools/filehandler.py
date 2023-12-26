@@ -75,6 +75,8 @@ class isx_files_handler:
 
                 if file_handler_status['input_parameters']==input_parameters:
                     self.__dict__.update(file_handler_status['computed_parameters']) 
+                else:
+                    os.remove(files_list_log)
                 return
 
         lists_inputs = {
@@ -105,17 +107,17 @@ class isx_files_handler:
             lists_inputs['outputsfolders']):
 
             files = glob(str(Path(mainf)/f/fpatter), recursive=False)
-            
+            assert len(files) > 0, "No file found for {}.".format(
+                str(Path(mainf) / f / fpatter)
+            )
             if one_file_per_folder:
-                assert len(files) == 1, "None or multiple files found for {}.".format(
+                assert len(files) == 1, "Multiple files found for {}.".format(
                     str(Path(mainf) / f / fpatter)
                 )
+                
                 self.rec_paths.append(files[0])
                 self.outputsfolders.append(str(Path(outf)/f))
             else:
-                assert len(files) > 0, "No file found for {}.".format(
-                    str(Path(mainf) / f / fpatter)
-                )
                 rec2add = [r for r in files if f not in self.rec_paths]
                 self.rec_paths.extend(rec2add)
                 self.outputsfolders.extend([str(Path(outf)/f) for r in rec2add])
@@ -170,7 +172,7 @@ class isx_files_handler:
                 self.efocus.append(efocus)
                 pr = Path(rec)
                 efocus_filenames = [pr.stem + '_'+ str(ef) + pr.suffix for ef in efocus]
-                self.focus_files[rec]=[str(self.outputsfolders[i]/Path(ef))  
+                self.focus_files[rec]=[str(Path(self.outputsfolders[i])/Path(ef))  
                                             for ef in efocus_filenames]
                 self.p_recording_labels.extend([self.recording_labels[i]+f'_{ef}'
                                                     for ef in efocus])
@@ -208,7 +210,12 @@ class isx_files_handler:
                 if len(existing_files)!=len(planes_fs): #has files to run
                     for f in existing_files: #remove existing planes
                         os.remove(f)
-                    isx.de_interleave(main_file, planes_fs, focus)
+                    try:
+                        isx.de_interleave(main_file, planes_fs, focus)
+                    except Exception as err :
+                        print('Reading: ', main_file)
+                        print('Writting: ', planes_fs)
+                        raise err
         print('done')
 
     def get_pair_filenames(self, operation:str)->Tuple[list,list]:
@@ -411,7 +418,7 @@ class isx_files_handler:
             write_log_file(parameters,{'function':'project_movie'},
                 input_files_keys=['input_movie_files'], 
                 output_file_key='output_image_file')
-
+        print('done')
     def create_dff(self, overwrite=False, verbose=False, **kws):
         if overwrite:
             for output in self.get_results_filenames("dff", op=None):
@@ -433,7 +440,8 @@ class isx_files_handler:
             write_log_file(parameters,{'function':'dff'},
                 input_files_keys=['input_movie_files'], 
                 output_file_key='output_movie_files')
-
+        print('done')
+        
     def extract_cells(self, alg:str, overwrite:bool=False, verbose:bool=False,
         cells_extr_params:Union[dict,None]=None, detection_params:Union[dict,None]=None,
         accept_reject_params:Union[dict,None]=None,
@@ -576,11 +584,11 @@ class isx_files_handler:
         #multiplane_registration
         if verbose:
             print('Starting multiplane registration:...')
-        parameters = self.default_parameters['multiplane_registration'].copy() 
+        mpr_parameters = self.default_parameters['multiplane_registration'].copy() 
         if multiplane_params is not None:
             for key, value in multiplane_params.items():
-                assert key in parameters, f'The parameter: {key} does not exist'
-                parameters[key] = value
+                assert key in mpr_parameters, f'The parameter: {key} does not exist'
+                mpr_parameters[key] = value
         
         for main_file,single_planes in self.focus_files.items():
             if len(single_planes)==1: #doesn't have multiplane
@@ -598,7 +606,6 @@ class isx_files_handler:
             
             new_data = {'input_cell_set_files': input_cell_set_files,
                         'output_cell_set_file': output_cell_set_file}
-            mpr_parameters=self.default_parameters['multiplane_registration'].copy()
             mpr_parameters.update(new_data) 
 
             if same_json_or_remove(mpr_parameters, output=output_cell_set_file,
@@ -607,6 +614,7 @@ class isx_files_handler:
 
             try:
                 isx.multiplane_registration(**del_keys(mpr_parameters,['comments']))
+                
             except Exception as e:
                 # Code to handle the exception
                 print(f"Exception: {e}")
