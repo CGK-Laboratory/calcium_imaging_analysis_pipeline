@@ -49,11 +49,11 @@
         "output_unit_type":"df_over_noise"
     },
     "pca-ica": {
-        "num_pcs":50,
-        "num_ics":41,
+        "num_pcs":60,
+        "num_ics":50,
         "unmix_type":"spatial",
         "ica_temporal_weight":0,
-        "max_iterations":100,
+        "max_iterations":1000,
         "convergence_threshold":1e-05,
         "block_size":1000,
         "auto_estimate_num_ics":false, 
@@ -77,5 +77,9 @@
     },
     "project_movie": {
         "stat_type":"max"
+    },
+    "longitudinal_registration": {
+        "min_correlation":0.5,
+        "accepted_cells_only":false
     }
 }
