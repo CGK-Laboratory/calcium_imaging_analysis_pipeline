@@ -77,12 +77,12 @@ def write_log_file(params, extra_params={}, input_files_keys = ['input_movie_fil
         input_files = data[input_file_key]
         if not isinstance(input_files,list):
             input_files = [input_files]
-            for input_file in input_files:
-                input_json = json_filename(input_file)
-                if os.path.exists(input_json):
-                    with open(input_json) as file:
-                        input_data = json.load(file)
-                    temp_date_str= max(input_data['date'], temp_date_str)
+        for input_file in input_files:
+            input_json = json_filename(input_file)
+            if os.path.exists(input_json):
+                with open(input_json) as file:
+                    input_data = json.load(file)
+                temp_date_str= max(input_data['date'], temp_date_str)
     data['input_modification_date'] = temp_date_str
     data['date']= actual_date.strftime("%Y-%m-%d %H:%M:%S")
     with open(log_path, 'w') as file:

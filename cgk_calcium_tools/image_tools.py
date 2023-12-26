@@ -24,7 +24,7 @@ def plot_grid_max_dff_and_cellmap_fh(
         plt.subplot(nrows,ncols, i+1)
         plot_max_dff_and_cellmap_fh(
             fh, idx=i,
-            eqhist=True, cellsetname=cellsetname,
+            eqhist=eqhist, cellsetname=cellsetname,
             status_list=status_list, colors=colors,
             op=None, before_registration=before_registration
         )

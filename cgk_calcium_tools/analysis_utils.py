@@ -15,7 +15,7 @@ def compute_firing_rates(events_df,cellsets_df):
     return fr
 
 
-def compute_acumulated(events_df, cellsets_df, datapoints_per_minute=2):
+def compute_acumulated(events_df, cellsets_df, datapoints_per_minute=2, normalized=False):
     
     cum_events_df = []
     for ed_file, df in events_df.groupby('ed_file'):
@@ -28,19 +28,16 @@ def compute_acumulated(events_df, cellsets_df, datapoints_per_minute=2):
             )/(60*1000**2)
             calc_cum_events = np.vectorize(lambda x: sum(evs_minutes < x))
             cum_events = calc_cum_events(time_axis)
-    
-            cum_events_df.append(
-                pd.DataFrame(
-                    {
-                        "ed_file": ed_file,
-                        "Recording Label": label,
-                        "cell_name": cell,
-                        "Time (minutes)": time_axis,
-                        "Cumulative Events": cum_events.copy(),
-                    }
-                )
-            )
-    
+            aux_df = pd.DataFrame({
+                                "ed_file": ed_file,
+                                "Recording Label": label,
+                                "cell_name": cell,
+                                "Time (minutes)": time_axis,
+                                "Cumulative Events": cum_events.copy(),
+                      })
+            aux_df["Cumulative Distribution Function"]= cum_events.copy()/np.max(cum_events)
+            cum_events_df.append(aux_df)
+            
     return pd.concat(cum_events_df)
 
 def get_movies_info(rec_paths)->pd.DataFrame:
@@ -58,6 +55,7 @@ def get_movies_info(rec_paths)->pd.DataFrame:
                 "Subfolder": str(Path(file).parent.name),
             }
         )
+        movie.flush()
         del movie
     return pd.DataFrame(video_data)
 
