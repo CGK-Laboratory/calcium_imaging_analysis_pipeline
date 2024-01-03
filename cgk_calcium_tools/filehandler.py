@@ -581,6 +581,7 @@ class isx_files_handler:
 
         if len([True for x in self.focus_files.values() if len(x)>1])==0:
             return
+            
         #multiplane_registration
         if verbose:
             print('Starting multiplane registration:...')
@@ -605,59 +606,58 @@ class isx_files_handler:
 
             
             new_data = {'input_cell_set_files': input_cell_set_files,
-                        'output_cell_set_file': output_cell_set_file}
+                        'output_cell_set_file': output_cell_set_file,
+                       'auto_accept_reject':ar_cell_set_file
+                       }
             mpr_parameters.update(new_data) 
 
-            if same_json_or_remove(mpr_parameters, output=output_cell_set_file,
-                verbose=verbose, input_files_keys=['input_cell_set_files']):
-                continue
+            if not same_json_or_remove(mpr_parameters, output=output_cell_set_file,
+                verbose=verbose, input_files_keys=['input_cell_set_files','auto_accept_reject']):
+                try:
+                    isx.multiplane_registration(**del_keys(mpr_parameters,['comments','auto_accept_reject']))
 
-            try:
-                isx.multiplane_registration(**del_keys(mpr_parameters,['comments']))
+                except Exception as e:
+                    # Code to handle the exception
+                    print(f"Exception: {e}")
+    
+                    if not os.path.exists(output_cell_set_file):
+                        print(f"Warning: File: {output_cell_set_file} not generated.\n" +
+                                        "Empty cellmap created in its place")
+                        cell_set_plane = isx.CellSet.read(input_cell_set_files[0])
+                        cell_set = isx.CellSet.write(output_cell_set_file, cell_set_plane.timing, cell_set_plane.spacing)
+                        image_null = np.zeros(cell_set.spacing.num_pixels,dtype=np.float32)
+                        trace_null = np.zeros(cell_set.timing.num_samples,dtype=np.float32)
+                        cell_set.set_cell_data(0, image_null, trace_null, '')
+                        cell_set.flush()
+                        del cell_set
+                        del cell_set_plane
+            
                 
-            except Exception as e:
-                # Code to handle the exception
-                print(f"Exception: {e}")
-
-                if not os.path.exists(output_cell_set_file):
-                    print(f"Warning: File: {output_cell_set_file} not generated.\n" +
-                                    "Empty cellmap created in its place")
-                    cell_set_plane = isx.CellSet.read(input_cell_set_files[0])
-                    cell_set = isx.CellSet.write(output_cell_set_file, cell_set_plane.timing, cell_set_plane.spacing)
-                    image_null = np.zeros(cell_set.spacing.num_pixels,dtype=np.float32)
-                    trace_null = np.zeros(cell_set.timing.num_samples,dtype=np.float32)
-                    cell_set.set_cell_data(0, image_null, trace_null, '')
-                    cell_set.flush()
-                    del cell_set
-                    del cell_set_plane
-        
-            mpr_parameters['auto_accept_reject'] = ar_cell_set_file
-            #this registration uses the status of the cells, therefore it depends of the auto accept/reject
-            write_log_file(mpr_parameters,{'function': 'multiplane_registration'},
-                            input_files_keys = ['input_cell_set_files','auto_accept_reject'], 
-                            output_file_key ='output_cell_set_file')
+                write_log_file(mpr_parameters,{'function': 'multiplane_registration'},
+                                input_files_keys = ['input_cell_set_files','auto_accept_reject'], 
+                                output_file_key ='output_cell_set_file')
+                
             #event detection in registered cellset
             new_data = {'input_cell_set_files': output_cell_set_file, 
                         'output_event_set_files': ed_file}
             ed_parameters.update(new_data) 
-            if same_json_or_remove(ed_parameters, output=ed_file, verbose=verbose,
+            if not same_json_or_remove(ed_parameters, output=ed_file, verbose=verbose,
                 input_files_keys=['input_cell_set_files']):
-                continue
-            try:
-                isx.event_detection(**del_keys(ed_parameters,['comments']))
-            except Exception as e:
-                print(f"Warning: Event_detection, failed to create file: {ed_file}.\n" +
-                                "Empty file created with its place")
-                cell_set = isx.CellSet.read(output_cell_set_file)
-                evset = isx.EventSet.write(ed_file, cell_set.timing, [''])
-                evset.flush()
-                del evset
-                del cell_set
-            
-            write_log_file(ed_parameters,{'function':'event_detection'},
-                input_files_keys = ['input_cell_set_files'], 
-                output_file_key ='output_event_set_files')
-
+                try:
+                    isx.event_detection(**del_keys(ed_parameters,['comments']))
+                except Exception as e:
+                    print(f"Warning: Event_detection, failed to create file: {ed_file}.\n" +
+                                    "Empty file created with its place")
+                    cell_set = isx.CellSet.read(output_cell_set_file)
+                    evset = isx.EventSet.write(ed_file, cell_set.timing, [''])
+                    evset.flush()
+                    del evset
+                    del cell_set
+                
+                write_log_file(ed_parameters,{'function':'event_detection'},
+                    input_files_keys = ['input_cell_set_files'], 
+                    output_file_key ='output_event_set_files')
+            #auto accept reject
             new_data = {'input_cell_set_files': output_cell_set_file,
                     'input_event_set_files': ed_file}
             ar_parameters.update(new_data) 
@@ -670,7 +670,7 @@ class isx_files_handler:
                 input_files_keys = ['input_cell_set_files','input_event_set_files'],
                 output_file_key ='config_json')
         print('done')
-                
+
 
 
 
