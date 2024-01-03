@@ -30,10 +30,16 @@ def check_same_existing_json(parameters, json_file,input_files_keys,verbose):
         prev_parameters = json.load(file)
     for key, value in parameters.items():
         #only comments can be different
-        if key !='comments' and prev_parameters[key] != value:
-            if verbose:
-                print(f'different {key}: old:{prev_parameters[key]}, new:{value}')
-            return False
+        if key !='comments':
+            if key not in prev_parameters:
+                if verbose:
+                    print(f'new parameter {key}')
+                return False
+            elif prev_parameters[key] != value:
+                if verbose:
+                    print(f'different {key}: old:{prev_parameters[key]}, new:{value}')
+                return False
+                
     
     #Check dates for all input files dates are consistent
     for input_file_key in input_files_keys:
@@ -47,10 +53,11 @@ def check_same_existing_json(parameters, json_file,input_files_keys,verbose):
             if os.path.exists(json_file):
                 with open(json_file) as in_file:
                     in_data = json.load(in_file)
-                if prev_parameters['input_modification_date'] > in_data['date']:
+                if prev_parameters['input_modification_date'] < in_data['date']:
                     old_date = prev_parameters['input_modification_date']
                     new_date = in_data['date']
-                    print(f'updated file {json_file}: old:{old_date}, new:{new_date}')
+                    if verbose:
+                        print(f'updated file {json_file}: old:{old_date}, new:{new_date}')
                     return False
     return True
 
