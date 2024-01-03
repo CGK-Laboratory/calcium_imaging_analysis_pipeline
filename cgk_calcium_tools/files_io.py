@@ -36,10 +36,14 @@ def check_same_existing_json(parameters, json_file,input_files_keys,verbose):
                     print(f'new parameter {key}')
                 return False
             elif prev_parameters[key] != value:
+                if key == 'isx_version':
+                    if verbose:
+                        print(f'Warning. file created with isx version {prev_parameters[key]}, current:{value}')
+                    continue
                 if verbose:
                     print(f'different {key}: old:{prev_parameters[key]}, new:{value}')
                 return False
-                
+        
     
     #Check dates for all input files dates are consistent
     for input_file_key in input_files_keys:
