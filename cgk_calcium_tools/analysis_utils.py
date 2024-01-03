@@ -8,10 +8,10 @@ def cellmetrics(fh, cellsetname="pca-ica"):
     cs = isx.CellSet.read()
 
 
-def compute_firing_rates(events_df,cellsets_df):    
+def compute_events_rates(events_df,cellsets_df):    
     fr = events_df.groupby(["Recording Label", "cell_name"])["Time (us)"].count().rename('#events').reset_index()  
     
-    fr['Firing Rate (Hz)'] = fr.apply(lambda row: row['#events']/cellsets_df.loc[row["Recording Label"],"Duration (s)"], axis=1)
+    fr['Events per minute'] = fr.apply(lambda row: 60*row['#events']/cellsets_df.loc[row["Recording Label"],"Duration (s)"], axis=1)
     return fr
 
 
@@ -91,7 +91,6 @@ def get_eventset(fh, cellsetname="pca-ica", accepted_only = True):
     events_df = []
     for events,cellset, label in zip(event_det_files, cellset_files, labels):
         ev = isx.EventSet.read(events)
-        
         cs = isx.CellSet.read(cellset)
         for n in range(cs.num_cells):
             if not accepted_only or cs.get_cell_status(n) == "accepted":
