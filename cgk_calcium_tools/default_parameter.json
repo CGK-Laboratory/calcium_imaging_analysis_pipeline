@@ -60,7 +60,7 @@
         "average_cell_diameter":13
     },
     "event_detection": {
-        "threshold":5,
+        "threshold":6,
         "tau":0.095,
         "comments":"We selected this tau because we are using jGCaMP8m",
         "event_time_ref":"beginning",
