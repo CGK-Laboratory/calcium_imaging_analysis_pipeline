@@ -59,6 +59,20 @@ def get_movies_info(rec_paths)->pd.DataFrame:
         del movie
     return pd.DataFrame(video_data)
 
+def get_truncated_motion_correction_prop(fh, prop_thr = 0.05, translation_thr= None,op='MC'):
+    translation_files = fh.get_results_filenames("translations.csv",op=op)
+    if translation_thr is None:
+        translation_thr = fh.default_parameters['motion_correct']['max_translation']
+
+    for f in translation_files:
+        translation_files_df = pd.read_csv(f)
+        arr = np.logical_or(translation_files_df.translationY.abs()==translation_thr,
+                                translation_files_df.translationX.abs()==translation_thr)
+        prop = float(sum(arr))/len(arr)
+        if  prop > prop_thr:
+            print('rate of {:.2f} of frames with truncated motion corrextion in file {}'.format(prop,f))
+        
+
 
 def get_cellset_info(fh, cellset_name="pca-ica")->pd.DataFrame:
     cellset_files = fh.get_results_filenames(f"{cellset_name}", op=None,proccesing = False)
