@@ -212,10 +212,23 @@ class isx_files_handler:
                         os.remove(f)
                     try:
                         isx.de_interleave(main_file, planes_fs, focus)
+                        
+                        #de_interleave_params = {'input_movie_files':main_file, 
+                        #                        'output_movie_files':planes_fs, 
+                        #                        'in_efocus_values':focus}
+                        #if same_json_or_remove(parameters, input_files_keys=['input_movie_files'],
+                        #    output=output, verbose=verbose):
+                        #    continue
+                        #isx.de_interleave(**de_interleave_params)
+                        #write_log_file(de_interleave_params,{'function':'de_interleave'},
+                        #    input_files_keys=['input_movie_files'], 
+                        #    output_file_key='output_movie_files')
+                    
                     except Exception as err :
                         print('Reading: ', main_file)
                         print('Writting: ', planes_fs)
                         raise err
+                
         print('done')
 
     def get_pair_filenames(self, operation:str)->Tuple[list,list]:
@@ -292,7 +305,7 @@ class isx_files_handler:
                 assert x in y, f"Error {x} not in {y}"
     
     def get_results_filenames(self, name:str, op:Union[None,str]=None, subfolder:str="",
-        idx:Union[None,int]=None, proccesing:bool=True)->list:
+        idx:Union[None,int]=None, single_plane:bool=True)->list:
 
         if op is not None:
             opi = self.processing_steps.index(op)
@@ -305,7 +318,7 @@ class isx_files_handler:
             ext = ".isxd"
         suffix_out = "-" + "-".join(steps) + "-{}{}".format(name, ext)
         
-        if proccesing:
+        if single_plane:
             file_list = self.p_rec_paths
             ofolders = self.p_outputsfolders
         else:
@@ -389,15 +402,18 @@ class isx_files_handler:
                                                             op=op)
 
             motion_correct_step(translation_files,crop_rect_files,parameters,
-                                pairlist,verbose) 
+                                pairlist,verbose)
+
+        
         if op.startswith('TR'):
             print('Trim movies...')
             trim_movie(pairlist, parameters , verbose)
                                  
         print ('done')
-
+    
     def project_movie(self, input_name:str='dff',output_name:str='maxdff',
                     operation=None,overwrite=False, verbose=False, **kws):
+        
         if overwrite:
             for output in self.get_results_filenames(output_name, op=operation):
                 remove_file_and_json(output)
@@ -598,11 +614,11 @@ class isx_files_handler:
                             idx=[self.p_rec_paths.index(f) for f in single_planes])
             idx = [self.rec_paths.index(main_file)]
             output_cell_set_file = self.get_results_filenames(f"{cellsetname}", op=None,
-                            idx=idx, proccesing=False)[0]
+                            idx=idx, single_plane=False)[0]
             ed_file = self.get_results_filenames(f"{cellsetname}-ED", op=None, 
-                            idx=idx, proccesing=False)[0]
+                            idx=idx, single_plane=False)[0]
             ar_cell_set_file = self.get_results_filenames(f"{cellsetname}-accept_reject", 
-                        op=None, idx=idx, proccesing=False)[0]
+                        op=None, idx=idx, single_plane=False)[0]
 
             
             new_data = {'input_cell_set_files': input_cell_set_files,
@@ -671,7 +687,39 @@ class isx_files_handler:
                 output_file_key ='config_json')
         print('done')
 
+    def cell_metrics(self, cellsetname, verbose=False):
+        
+        cell_set_files = self.get_results_filenames(f"{cellsetname}", op=None, single_plane=False)
+        ed_files = self.get_results_filenames(f"{cellsetname}-ED", op=None, single_plane=False)
+        metrics_files = self.get_results_filenames(f"{cellsetname}_metrics.csv", op=None, single_plane=False)
 
+        for cellset, ed, metric in zip(cell_set_files, ed_files, metrics_files):
+            inputs_args = {'input_cell_set_files': cellset,
+                    'input_event_set_files': ed,
+                    'output_metrics_files': metric}
+            if not same_json_or_remove(inputs_args, output=metric, verbose=verbose,
+                input_files_keys=['input_cell_set_files','input_event_set_files']):
+                try:
+                    isx.cell_metrics(**inputs_args)
+                except Exception as e:
+                    print(e)
+                write_log_file(inputs_args,{'function':'cell_metrics'},
+                    input_files_keys = ['input_cell_set_files','input_event_set_files'],
+                    output_file_key ='output_metrics_files')
+        
+        df = []
+        for metric_file, label,cell_set_file in zip(metrics_files,self.recording_labels,cell_set_files):
+            aux = pd.read_csv(metric_file)
+            aux['Recording Label']= label
+            cell_set = isx.CellSet.read(cell_set_file)
+            num_cells = cell_set.num_cells
+            status = pd.DataFrame.from_dict({cell:[cell_set.get_cell_name(cell),cell_set.get_cell_status(cell)] for cell in range(num_cells)}, orient='index',columns = ['cellName','status'])
+            cell_set.flush()
+            aux = aux.merge(status,on='cellName')
+
+            df.append(aux)
+            
+        return pd.concat(df)
 
 
 def get_segment_from_movie(inputfile, outputfile, borders, 

@@ -75,7 +75,7 @@ def get_truncated_motion_correction_prop(fh, prop_thr = 0.05, translation_thr= N
 
 
 def get_cellset_info(fh, cellset_name="pca-ica")->pd.DataFrame:
-    cellset_files = fh.get_results_filenames(f"{cellset_name}", op=None,proccesing = False)
+    cellset_files = fh.get_results_filenames(f"{cellset_name}", op=None,single_plane = False)
     labels = fh.recording_labels
     cellset_data = []
     for file, label in zip(cellset_files,labels):
@@ -99,8 +99,8 @@ def get_cellset_info(fh, cellset_name="pca-ica")->pd.DataFrame:
 
 def get_eventset(fh, cellsetname="pca-ica", accepted_only = True):
 
-    event_det_files = fh.get_results_filenames(f"{cellsetname}-ED", op=None,proccesing = False)
-    cellset_files = fh.get_results_filenames(f"{cellsetname}", op=None,proccesing = False)
+    event_det_files = fh.get_results_filenames(f"{cellsetname}-ED", op=None,single_plane = False)
+    cellset_files = fh.get_results_filenames(f"{cellsetname}", op=None,single_plane = False)
     labels = fh.recording_labels
     events_df = []
     for events,cellset, label in zip(event_det_files, cellset_files, labels):

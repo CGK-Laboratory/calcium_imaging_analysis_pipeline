@@ -24,7 +24,7 @@ def interactive_reject_accept_cell(files_handler, cellset_names):
 
 
     pn.extension()
-    file_list = files_handler.get_results_filenames(cellset_names, proccesing=True)
+    file_list = files_handler.get_results_filenames(cellset_names, single_plane=True)
     def callback_cellinfile(target, event):
         cs = isx.CellSet.read(
             file_list[files_handler.p_recording_labels.index(event.new)],
