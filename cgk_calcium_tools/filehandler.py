@@ -53,14 +53,7 @@ class isx_files_handler:
         made previously, there is an early return. By default "None"
     parameters_path: str, optional
         Path with the information of the default parameter. If it does not exist, an error occurs.
-        By default "os.path.join(os.path.dirname(__file__), "default_parameter.json")"
-
-    Returns
-    -------
-        None
-
-    Examples
-    --------
+        By default "default_parameter.json" in the same folder as this file.
 
     """
 
@@ -79,8 +72,7 @@ class isx_files_handler:
         ),
     ) -> None:
         self.processing_steps = processing_steps
-        assert os.path.exists(
-            parameters_path), "parameters file does not exist"
+        assert os.path.exists(parameters_path), "parameters file does not exist"
         assert (
             len([s for s in processing_steps if s.startswith("TR")]) <= 1
         ), "Pipeline can't handle multiple trims"
@@ -101,8 +93,7 @@ class isx_files_handler:
                     file_handler_status = json.load(file)
 
                 if file_handler_status["input_parameters"] == input_parameters:
-                    self.__dict__.update(
-                        file_handler_status["computed_parameters"])
+                    self.__dict__.update(file_handler_status["computed_parameters"])
                 else:
                     os.remove(files_list_log)
                 return
@@ -152,8 +143,7 @@ class isx_files_handler:
             else:
                 rec2add = [r for r in files if f not in self.rec_paths]
                 self.rec_paths.extend(rec2add)
-                self.outputsfolders.extend(
-                    [str(Path(outf) / f) for r in rec2add])
+                self.outputsfolders.extend([str(Path(outf) / f) for r in rec2add])
 
         for ofolder in self.outputsfolders:
             os.makedirs(ofolder, exist_ok=True)
@@ -173,8 +163,7 @@ class isx_files_handler:
         self.focus_files = {}
         self.efocus = []
         for i, rec in enumerate(self.rec_paths):
-            raw_gpio_file = os.path.splitext(
-                rec)[0] + ".gpio"  # raw data for gpio
+            raw_gpio_file = os.path.splitext(rec)[0] + ".gpio"  # raw data for gpio
             updated_gpio_file = (
                 os.path.splitext(rec)[0] + "_gpio.isxd"
             )  # after the first reading gpio is converted to this
@@ -202,8 +191,7 @@ class isx_files_handler:
                     efocus = [get_acquisition_info["Microscope Focus"]]
                 else:
                     efocus = [0]
-                    print(
-                        f"Info: Unable to verify Microscope Focus config in: {rec}")
+                    print(f"Info: Unable to verify Microscope Focus config in: {rec}")
             if len(efocus) == 1:
                 self.focus_files[rec] = [rec]
                 self.p_rec_paths.append(rec)
@@ -223,8 +211,7 @@ class isx_files_handler:
                     [self.recording_labels[i] + f"_{ef}" for ef in efocus]
                 )
                 self.p_rec_paths.extend(self.focus_files[rec])
-            self.p_outputsfolders.extend(
-                [self.outputsfolders[i]] * len(efocus))
+            self.p_outputsfolders.extend([self.outputsfolders[i]] * len(efocus))
 
         if files_list_log is not None:
             file_handler_status = {
@@ -246,7 +233,7 @@ class isx_files_handler:
 
     def de_interleave(self, overwrite: bool = False) -> None:
         """
-        This funtion use the isx.de_interleave funtion, wich de-interleaves multiplane movies
+        This function applies the isx.de_interleave function, which de-interleaves multiplane movies
 
         Parameters
         ----------
@@ -258,13 +245,9 @@ class isx_files_handler:
         -------
         None
 
-        Examples
-        --------
-
         """
         print("de_interleaving movies, please wait...")
-        for (main_file, planes_fs), focus in zip(
-                self.focus_files.items(), self.efocus):
+        for (main_file, planes_fs), focus in zip(self.focus_files.items(), self.efocus):
             if len(focus) > 1:  # has multiplane
                 existing_files = []
                 for sp_file in planes_fs:
@@ -311,9 +294,6 @@ class isx_files_handler:
         Tuple[list,list]
             pair of input and output file paths
 
-        Examples
-        --------
-
         """
         assert (
             operation in self.processing_steps
@@ -350,8 +330,6 @@ class isx_files_handler:
         list:
             With the outputs file path
 
-        Examples
-        --------
         """
         if op is None:
             op = self.processing_steps[-1]
@@ -367,10 +345,7 @@ class isx_files_handler:
             outputs.append(str(Path(ofolder, Path(file).stem + suffix_out)))
         return outputs
 
-    def check_str_in_filenames(
-            self,
-            strlist: list,
-            only_warning: bool = True) -> None:
+    def check_str_in_filenames(self, strlist: list, only_warning: bool = True) -> None:
         """
         This method verify the order of the files. Checking that each element of the
         input list is included in the recording filenames
@@ -385,9 +360,6 @@ class isx_files_handler:
          Returns
         -------
         None
-
-        Examples
-        --------
 
         """
         for x, y in zip(strlist, self.rec_paths):
@@ -424,9 +396,6 @@ class isx_files_handler:
         -------
         list
             output paths
-
-        Examples
-        --------
 
         """
         if op is not None:
@@ -474,9 +443,6 @@ class isx_files_handler:
         -------
         None
 
-        Examples
-        --------
-
         """
         paths = self.get_filenames(op)
         for path in paths:
@@ -486,12 +452,7 @@ class isx_files_handler:
             if os.path.exists(json_file):
                 os.remove(json_file)
 
-    def run_step(
-            self,
-            op: str,
-            overwrite: bool = False,
-            verbose=False,
-            **kws) -> None:
+    def run_step(self, op: str, overwrite: bool = False, verbose=False, **kws) -> None:
         """
         This function executes the specified preprocessing operation.
 
@@ -507,9 +468,6 @@ class isx_files_handler:
         Returns
         -------
         None
-
-        Examples
-        --------
 
         """
         pairlist = self.get_pair_filenames(op)
@@ -551,17 +509,12 @@ class isx_files_handler:
         if op.startswith("MC"):
             print("Applying motion correction. Please wait...")
 
-            translation_files = self.get_results_filenames(
-                "translations.csv", op=op)
-            crop_rect_files = self.get_results_filenames(
-                "crop_rect.csv", op=op)
+            translation_files = self.get_results_filenames("translations.csv", op=op)
+            crop_rect_files = self.get_results_filenames("crop_rect.csv", op=op)
 
             motion_correct_step(
-                translation_files,
-                crop_rect_files,
-                parameters,
-                pairlist,
-                verbose)
+                translation_files, crop_rect_files, parameters, pairlist, verbose
+            )
 
         if op.startswith("TR"):
             print("Trim movies...")
@@ -579,7 +532,7 @@ class isx_files_handler:
         **kws,
     ) -> None:
         """
-        This function runs the isx.project_movie funtion, wich project movies to a single statistic image.
+        This function applies isx.project_movie to project movies to a single statistic image.
 
         Parameters
         ----------
@@ -598,13 +551,9 @@ class isx_files_handler:
         -------
         None
 
-        Examples
-        --------
-
         """
         if overwrite:
-            for output in self.get_results_filenames(
-                    output_name, op=operation):
+            for output in self.get_results_filenames(output_name, op=operation):
                 remove_file_and_json(output)
         parameters = self.default_parameters["project_movie"].copy()
 
@@ -616,9 +565,7 @@ class isx_files_handler:
             self.get_results_filenames(input_name, op=operation),
             self.get_results_filenames(output_name, op=operation),
         ):
-            new_data = {
-                "input_movie_files": input,
-                "output_image_file": output}
+            new_data = {"input_movie_files": input, "output_image_file": output}
             parameters.update(new_data)
             if same_json_or_remove(
                 parameters,
@@ -638,8 +585,7 @@ class isx_files_handler:
 
     def create_dff(self, overwrite=False, verbose=False, **kws) -> None:
         """
-        This function use de isx.dff funtion, wich compute DF/F movies,
-        where each output pixel value represents a relative change from a baseline
+        This function applies isx.dff function, to compute the DF/F movies.
 
         Parameters
         ----------
@@ -652,8 +598,6 @@ class isx_files_handler:
         -------
         None
 
-        Examples
-        --------
         """
 
         if overwrite:
@@ -666,12 +610,9 @@ class isx_files_handler:
             parameters[key] = value
 
         for input, output in zip(
-            self.get_filenames(
-                op=None), self.get_results_filenames(
-                "dff", op=None)):
-            new_data = {
-                "input_movie_files": input,
-                "output_movie_files": output}
+            self.get_filenames(op=None), self.get_results_filenames("dff", op=None)
+        ):
+            new_data = {"input_movie_files": input, "output_movie_files": output}
             parameters.update(new_data)
             if same_json_or_remove(
                 parameters,
@@ -725,8 +666,6 @@ class isx_files_handler:
         -------
         None
 
-        Examples
-        --------
         """
         assert alg in ["pca-ica", "cnmfe"], "alg must be 'pca-ica' or 'cnmfe'."
 
@@ -759,9 +698,7 @@ class isx_files_handler:
                         os.remove(json_file)
 
         for input, output in zip(inputs_files, cellsets):
-            new_data = {
-                "input_movie_files": input,
-                "output_cell_set_files": output}
+            new_data = {"input_movie_files": input, "output_cell_set_files": output}
             parameters.update(new_data)
             if same_json_or_remove(
                 parameters,
@@ -774,17 +711,13 @@ class isx_files_handler:
 
             if not os.path.exists(output):
                 print(
-                    f"Warning: Algorithm {alg}, failed to create file: {output}.\n" +
-                    "Empty cellmap created with its place")
+                    f"Warning: Algorithm {alg}, failed to create file: {output}.\n"
+                    + "Empty cellmap created with its place"
+                )
                 movie = isx.Movie.read(input)
-                cell_set = isx.CellSet.write(
-                    output, movie.timing, movie.spacing)
-                image_null = np.zeros(
-                    cell_set.spacing.num_pixels).astype(
-                    np.float32)
-                trace_null = np.zeros(
-                    cell_set.timing.num_samples).astype(
-                    np.float32)
+                cell_set = isx.CellSet.write(output, movie.timing, movie.spacing)
+                image_null = np.zeros(cell_set.spacing.num_pixels).astype(np.float32)
+                trace_null = np.zeros(cell_set.timing.num_samples).astype(np.float32)
                 cell_set.set_cell_data(0, image_null, trace_null, "")
                 cell_set.flush()
                 del cell_set
@@ -808,9 +741,7 @@ class isx_files_handler:
         for input, output in zip(
             cellsets, self.get_results_filenames(f"{cellsetname}-ED", op=None)
         ):
-            new_data = {
-                "input_cell_set_files": input,
-                "output_event_set_files": output}
+            new_data = {"input_cell_set_files": input, "output_event_set_files": output}
             ed_parameters.update(new_data)
             if same_json_or_remove(
                 ed_parameters,
@@ -823,8 +754,9 @@ class isx_files_handler:
                 isx.event_detection(**del_keys(ed_parameters, ["comments"]))
             except Exception as e:
                 print(
-                    f"Warning: Event_detection, failed to create file: {output}.\n" +
-                    "Empty file created with its place")
+                    f"Warning: Event_detection, failed to create file: {output}.\n"
+                    + "Empty file created with its place"
+                )
                 cell_set = isx.CellSet.read(input)
                 evset = isx.EventSet.write(output, cell_set.timing, [""])
                 evset.flush()
@@ -877,8 +809,7 @@ class isx_files_handler:
         # multiplane_registration
         if verbose:
             print("Starting multiplane registration:...")
-        mpr_parameters = self.default_parameters["multiplane_registration"].copy(
-        )
+        mpr_parameters = self.default_parameters["multiplane_registration"].copy()
         if multiplane_params is not None:
             for key, value in multiplane_params.items():
                 assert key in mpr_parameters, f"The parameter: {key} does not exist"
@@ -900,7 +831,8 @@ class isx_files_handler:
                 f"{cellsetname}-ED", op=None, idx=idx, single_plane=False
             )[0]
             ar_cell_set_file = self.get_results_filenames(
-                f"{cellsetname}-accept_reject", op=None, idx=idx, single_plane=False)[0]
+                f"{cellsetname}-accept_reject", op=None, idx=idx, single_plane=False
+            )[0]
 
             new_data = {
                 "input_cell_set_files": input_cell_set_files,
@@ -913,9 +845,7 @@ class isx_files_handler:
                 mpr_parameters,
                 output=output_cell_set_file,
                 verbose=verbose,
-                input_files_keys=[
-                    "input_cell_set_files",
-                    "auto_accept_reject"],
+                input_files_keys=["input_cell_set_files", "auto_accept_reject"],
             ):
                 try:
                     isx.multiplane_registration(
@@ -928,10 +858,10 @@ class isx_files_handler:
 
                     if not os.path.exists(output_cell_set_file):
                         print(
-                            f"Warning: File: {output_cell_set_file} not generated.\n" +
-                            "Empty cellmap created in its place")
-                        cell_set_plane = isx.CellSet.read(
-                            input_cell_set_files[0])
+                            f"Warning: File: {output_cell_set_file} not generated.\n"
+                            + "Empty cellmap created in its place"
+                        )
+                        cell_set_plane = isx.CellSet.read(input_cell_set_files[0])
                         cell_set = isx.CellSet.write(
                             output_cell_set_file,
                             cell_set_plane.timing,
@@ -968,12 +898,12 @@ class isx_files_handler:
                 input_files_keys=["input_cell_set_files"],
             ):
                 try:
-                    isx.event_detection(
-                        **del_keys(ed_parameters, ["comments"]))
+                    isx.event_detection(**del_keys(ed_parameters, ["comments"]))
                 except Exception as e:
                     print(
-                        f"Warning: Event_detection, failed to create file: {ed_file}.\n" +
-                        "Empty file created with its place")
+                        f"Warning: Event_detection, failed to create file: {ed_file}.\n"
+                        + "Empty file created with its place"
+                    )
                     cell_set = isx.CellSet.read(output_cell_set_file)
                     evset = isx.EventSet.write(ed_file, cell_set.timing, [""])
                     evset.flush()
@@ -1007,7 +937,7 @@ class isx_files_handler:
 
     def cell_metrics(self, cellsetname: str, verbose=False) -> pd.dataframe:
         """
-        This funtion use the isx.cell_metrics funtion, wich compute cell metrics
+        This function use the isx.cell_metrics function, which compute cell metrics
         for a given cell set and events combination
 
         Parameters
@@ -1022,8 +952,7 @@ class isx_files_handler:
         pd.dataframe
             a concatenates list with metrics
 
-        Examples
-        --------
+
         """
         cell_set_files = self.get_results_filenames(
             f"{cellsetname}", op=None, single_plane=False
@@ -1035,8 +964,7 @@ class isx_files_handler:
             f"{cellsetname}_metrics.csv", op=None, single_plane=False
         )
 
-        for cellset, ed, metric in zip(
-                cell_set_files, ed_files, metrics_files):
+        for cellset, ed, metric in zip(cell_set_files, ed_files, metrics_files):
             inputs_args = {
                 "input_cell_set_files": cellset,
                 "input_event_set_files": ed,
@@ -1046,9 +974,7 @@ class isx_files_handler:
                 inputs_args,
                 output=metric,
                 verbose=verbose,
-                input_files_keys=[
-                    "input_cell_set_files",
-                    "input_event_set_files"],
+                input_files_keys=["input_cell_set_files", "input_event_set_files"],
             ):
                 try:
                     isx.cell_metrics(**inputs_args)
@@ -1094,7 +1020,7 @@ def get_segment_from_movie(
 ) -> None:
     """
     This function gets a segment of a video to create a new one. It's just an easy
-    handler of isx.trim_movie, wich trim frames from a movie to produce a new movie
+    handler of isx.trim_movie, which trim frames from a movie to produce a new movie
 
     Parameters
     ----------
@@ -1121,8 +1047,7 @@ def get_segment_from_movie(
 
     """
     assert len(borders) == 2, "borders must have two elements"
-    assert unit in [
-        "minutes", "seconds"], """unit could be 'minutes' or 'seconds'. """
+    assert unit in ["minutes", "seconds"], """unit could be 'minutes' or 'seconds'. """
     movie = isx.Movie.read(inputfile)
     if unit == "minutes":
         unitfactor = 60
@@ -1151,7 +1076,7 @@ def get_segment_from_movie(
     # remove fist frames:
     # don't cut if the segments are from the beggining or just exactlt
     # duration before the end
-    if (borders[0] != 0 and borders[0] != -duration_unit):
+    if borders[0] != 0 and borders[0] != -duration_unit:
         if borders[0] < 0:
             end1 = (duration_unit + borders[0]) / timing_period_unit - 1
         else:
@@ -1188,7 +1113,7 @@ def motion_correct_step(
     verbose=False,
 ) -> None:
     """
-    After checks, use the isx.motion_correct function, wich motion correct movies to a reference frame.
+    After checks, use the isx.motion_correct function, which motion correct movies to a reference frame.
 
     Parameters
     ----------
@@ -1244,7 +1169,7 @@ def preprocess_step(
     pairlist: Tuple[list, list], parameters: dict, verbose: bool = False
 ) -> None:
     """
-    After performing checks, use the isx.preprocess function, wich which preprocesses movies,
+    After performing checks, use the isx.preprocess function, which which preprocesses movies,
     optionally applying spatial and temporal downsampling and cropping.
 
     Parameters
@@ -1260,8 +1185,6 @@ def preprocess_step(
     -------
     None
 
-    Examples
-    --------
     """
     for input, output in pairlist:
         if isinstance(parameters["spatial_downsample_factor"], str):
@@ -1279,8 +1202,7 @@ def preprocess_step(
                 resolution[idx_resolution] / float(value)
             )
 
-        parameters.update({"input_movie_files": input,
-                          "output_movie_files": output})
+        parameters.update({"input_movie_files": input, "output_movie_files": output})
         if same_json_or_remove(
             parameters,
             input_files_keys=["input_movie_files"],
@@ -1288,12 +1210,8 @@ def preprocess_step(
             verbose=verbose,
         ):
             continue
-        isx.preprocess(
-            **del_keys(parameters, ["comments", "fix_frames_th_std"]))
-        nfixed = fix_frames(
-            output,
-            std_th=parameters["fix_frames_th_std"],
-            report=True)
+        isx.preprocess(**del_keys(parameters, ["comments", "fix_frames_th_std"]))
+        nfixed = fix_frames(output, std_th=parameters["fix_frames_th_std"], report=True)
 
         write_log_file(
             parameters,
@@ -1302,16 +1220,14 @@ def preprocess_step(
             output_file_key="output_movie_files",
         )
         if verbose:
-            print(
-                "{} preprocessing completed. {} frames fixed.".format(
-                    output, nfixed))
+            print("{} preprocessing completed. {} frames fixed.".format(output, nfixed))
 
 
 def spatial_filter_step(
     pairlist: Tuple[list, list], parameters: dict, verbose: bool = False
 ) -> None:
     """
-    After performing checks, use the isx.spatial_filter function, wich
+    After performing checks, use the isx.spatial_filter function, which
     apply spatial bandpass filtering to each frame of one or more movies
 
     Parameters
@@ -1327,12 +1243,9 @@ def spatial_filter_step(
     -------
     None
 
-    Examples
-    --------
     """
     for input, output in pairlist:
-        parameters.update({"input_movie_files": input,
-                          "output_movie_files": output})
+        parameters.update({"input_movie_files": input, "output_movie_files": output})
         if same_json_or_remove(
             parameters,
             input_files_keys=["input_movie_files"],
@@ -1356,7 +1269,7 @@ def trim_movie(
 ) -> None:
     """
     After verifying that the user_parameters are correct and obtaining the maximum file frame,
-    it invokes the isx.trim_movie funtion, which trims frames from a movie to generate a new movie
+    it invokes the isx.trim_movie function, which trims frames from a movie to generate a new movie
 
     Parameters
     ----------
@@ -1371,8 +1284,6 @@ def trim_movie(
     -------
     None
 
-    Examples
-    --------
     """
     assert (
         user_parameters["video_len"] is not None
@@ -1416,12 +1327,10 @@ def get_efocus(gpio_file: str) -> list:
     -------
     list
         list with the video_efocus
-    Examples
-    --------
+
     """
     gpio_set = isx.GpioSet.read(gpio_file)
-    efocus_values = gpio_set.get_channel_data(
-        gpio_set.channel_dict["e-focus"])[1]
+    efocus_values = gpio_set.get_channel_data(gpio_set.channel_dict["e-focus"])[1]
     efocus_values, efocus_counts = np.unique(efocus_values, return_counts=True)
     min_frames_per_efocus = 100
     video_efocus = efocus_values[efocus_counts >= min_frames_per_efocus]
@@ -1446,8 +1355,6 @@ def del_keys(d: dict, keys: list) -> dict:
     dict
         copy of the dictionary provided as an argument, excluding any references to the specified keys
 
-    Examples
-    --------
     """
     copy_dict = d.copy()
     for key in keys:

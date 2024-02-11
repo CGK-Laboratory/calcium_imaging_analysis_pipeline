@@ -27,8 +27,6 @@ def same_json_or_remove(
     bool
         Returns True if the file and json exists. Else returns False
 
-    Examples
-    --------
     """
     json_file = json_filename(output)
     if os.path.exists(json_file):
@@ -37,8 +35,7 @@ def same_json_or_remove(
                 parameters, json_file, input_files_keys, verbose
             ):
                 if verbose:
-                    print(
-                        f"File {output} already created with these parameters")
+                    print(f"File {output} already created with these parameters")
                 return True
         os.remove(json_file)
     if os.path.exists(output):
@@ -69,8 +66,6 @@ def check_same_existing_json(
     bool
         Returns True if there are no diferences in the parameters with the json file. Else returns False
 
-    Examples
-    --------
     """
     with open(json_file) as file:
         prev_parameters = json.load(file)
@@ -89,8 +84,7 @@ def check_same_existing_json(
                         )
                     continue
                 if verbose:
-                    print(
-                        f"different {key}: old:{prev_parameters[key]}, new:{value}")
+                    print(f"different {key}: old:{prev_parameters[key]}, new:{value}")
                 return False
 
     # Check dates for all input files dates are consistent
@@ -131,8 +125,6 @@ def json_filename(filename: str) -> str:
     str
         Returns the json path as string
 
-    Examples
-    --------
     """
     return os.path.splitext(filename)[0] + ".json"
 
@@ -150,8 +142,6 @@ def remove_file_and_json(output: str) -> None:
     -------
     None
 
-    Examples
-    --------
     """
     if os.path.exists(output):
         os.remove(output)
@@ -184,8 +174,6 @@ def write_log_file(
     -------
     None
 
-    Examples
-    --------
     """
 
     data = {}
