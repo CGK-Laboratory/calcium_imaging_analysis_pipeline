@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from glob import glob
 import numpy as np
-import isx 
+import isx
 import matplotlib.pyplot as plt
 import os
 from datetime import datetime
@@ -10,9 +10,11 @@ import hvplot.pandas
 import panel as pn
 import pandas as pd
 
-def interactive_reject_accept_cell(files_handler, cellset_names):
+
+def interactive_reject_accept_cell(files_handler, cellset_names: str):
     """
-    This function runs a simple GUI inside a jupyter notebook to see the calcium traces and accept/reject cells
+    This function runs a simple GUI inside a jupyter notebook to see the calcium traces
+    and accept/reject cells
 
     Parameters
     ----------
@@ -20,11 +22,12 @@ def interactive_reject_accept_cell(files_handler, cellset_names):
         isx_files_handler to use.
     cellset_names : str
         Name added to the results to describe the cellsets (usually related to the method use to detect cells).
+
     """
-
-
     pn.extension()
-    file_list = files_handler.get_results_filenames(cellset_names, single_plane=True)
+    file_list = files_handler.get_results_filenames(
+        cellset_names, single_plane=True)
+
     def callback_cellinfile(target, event):
         cs = isx.CellSet.read(
             file_list[files_handler.p_recording_labels.index(event.new)],
@@ -36,14 +39,18 @@ def interactive_reject_accept_cell(files_handler, cellset_names):
         target.param.trigger("value")
 
     select_files = pn.widgets.Select(
-        name="Select Session", options=files_handler.recording_labels, width=130
-    )
+        name="Select Session",
+        options=files_handler.recording_labels,
+        width=130)
     select_cell = pn.widgets.Select(
         name="Select Cell", options=[], size=6, width=130
     )  # using group it possible to separete accepted and rejected
-    accept_button = pn.widgets.Button(name="accept", button_type="success", width=60)
-    reject_button = pn.widgets.Button(name="reject", button_type="danger", width=60)
-    status = pn.widgets.StaticText(name="Status", value="", height=40, width=130)
+    accept_button = pn.widgets.Button(
+        name="accept", button_type="success", width=60)
+    reject_button = pn.widgets.Button(
+        name="reject", button_type="danger", width=60)
+    status = pn.widgets.StaticText(
+        name="Status", value="", height=40, width=130)
 
     def change_cell_status(new_status):
         if status.value == new_status:
@@ -63,7 +70,10 @@ def interactive_reject_accept_cell(files_handler, cellset_names):
         nfile = files_handler.recording_labels.index(select_files.value)
         n = select_cell.options.index(select_cell.value)
 
-        cs = isx.CellSet.read(file_list[nfile],read_only=True,)
+        cs = isx.CellSet.read(
+            file_list[nfile],
+            read_only=True,
+        )
         status.value = cs.get_cell_status(n)
         time = np.linspace(
             0,
@@ -82,14 +92,20 @@ def interactive_reject_accept_cell(files_handler, cellset_names):
         )
 
     select_files.link(
-        select_cell, callbacks={"value": callback_cellinfile}, bidirectional=False
-    )
+        select_cell,
+        callbacks={
+            "value": callback_cellinfile},
+        bidirectional=False)
     select_files.value = files_handler.p_recording_labels[0]
     select_files.param.trigger("value")
 
     return pn.Row(
         pn.Column(
-            select_files, select_cell, status, pn.Row(accept_button, reject_button)
-        ),
+            select_files,
+            select_cell,
+            status,
+            pn.Row(
+                accept_button,
+                reject_button)),
         timeplot,
     )
