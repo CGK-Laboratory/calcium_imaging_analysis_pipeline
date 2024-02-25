@@ -935,7 +935,7 @@ class isx_files_handler:
             )
         print("done")
 
-    def cell_metrics(self, cellsetname: str, verbose=False) -> pd.dataframe:
+    def cell_metrics(self, cellsetname: str, verbose=False) -> pd.DataFrame:
         """
         This function use the isx.cell_metrics function, which compute cell metrics
         for a given cell set and events combination
@@ -949,7 +949,7 @@ class isx_files_handler:
 
         Returns
         -------
-        pd.dataframe
+        pd.DataFrame
             a concatenates list with metrics
 
 
