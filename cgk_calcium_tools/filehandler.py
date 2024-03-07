@@ -128,7 +128,7 @@ class isx_files_handler:
             lists_inputs["outputsfolders"],
         ):
             if check_new_imputs:
-                # From NAS
+                # From raw data origin
                 files = glob(str(Path(mainf) / subfolder / fpatter), recursive=False)
                 assert len(files) > 0, "No file found for {}".format(
                     str(Path(mainf) / subfolder / fpatter)
