@@ -57,180 +57,6 @@ class isx_files_handler:
 
     """
 
-    # def __init__(
-    #     self,
-    #     main_data_folder: Union[str, list] = ".",
-    #     outputsfolders: Union[str, list] = ".",
-    #     data_subfolders: Union[str, list] = ".",
-    #     files_patterns: Union[str, list] = ".isx",
-    #     processing_steps: list = ["PP", "TR", "BP", "MC"],
-    #     one_file_per_folder: bool = True,
-    #     recording_labels: Union[str, None] = None,
-    #     files_list_log: Union[str, None] = None,
-    #     parameters_path: str = os.path.join(
-    #         os.path.dirname(__file__), "default_parameter.json"
-    #     ),
-    # ) -> None:
-    #     self.processing_steps = processing_steps
-    #     assert os.path.exists(parameters_path), "parameters file does not exist"
-    #     assert (
-    #         len([s for s in processing_steps if s.startswith("TR")]) <= 1
-    #     ), "Pipeline can't handle multiple trims"
-    #     with open(parameters_path) as file:
-    #         self.default_parameters = json.load(file)
-
-    #     if files_list_log is not None:
-    #         input_parameters = {
-    #             "main_data_folder": main_data_folder,
-    #             "outputsfolders": outputsfolders,
-    #             "data_subfolders": data_subfolders,
-    #             "files_patterns": files_patterns,
-    #             "one_file_per_folder": one_file_per_folder,
-    #             "recording_labels": recording_labels,
-    #         }
-    #         if os.path.exists(files_list_log):
-    #             with open(files_list_log, "r") as file:
-    #                 file_handler_status = json.load(file)
-
-    #             if file_handler_status["input_parameters"] == input_parameters:
-    #                 self.__dict__.update(file_handler_status["computed_parameters"])
-    #             else:
-    #                 os.remove(files_list_log)
-    #             return
-
-    #     lists_inputs = {
-    #         "main_data_folder": ifstr2list(main_data_folder),
-    #         "outputsfolders": ifstr2list(outputsfolders),
-    #         "data_subfolders": ifstr2list(data_subfolders),
-    #         "files_patterns": ifstr2list(files_patterns),
-    #     }
-    #     len_list_variables = np.unique([len(v) for v in lists_inputs.values()])
-    #     len_list_variables = len_list_variables[len_list_variables > 1]
-
-    #     if len(len_list_variables) > 0:
-    #         assert (
-    #             len(np.unique(len_list_variables)) == 1
-    #         ), "the list inputs should have the same length"
-    #         len_list = len_list_variables[0]
-    #     else:
-    #         len_list = 1
-
-    #     for k, v in lists_inputs.items():
-    #         if len(v) != len_list:
-    #             # this will extend the single inputs
-    #             lists_inputs[k] = v * len_list
-
-    #     self.rec_subfolders = []
-    #     self.outputsfolders = []
-    #     self.rec_paths = []
-    #     for mainf, f, fpatter, outf in zip(
-    #         lists_inputs["main_data_folder"],
-    #         lists_inputs["data_subfolders"],
-    #         lists_inputs["files_patterns"],
-    #         lists_inputs["outputsfolders"],
-    #     ):
-    #         files = glob(str(Path(mainf) / f / fpatter), recursive=False)
-    #         assert len(files) > 0, "No file found for {}.".format(
-    #             str(Path(mainf) / f / fpatter)
-    #         )
-    #         if one_file_per_folder:
-    #             assert len(files) == 1, "Multiple files found for {}.".format(
-    #                 str(Path(mainf) / f / fpatter)
-    #             )
-
-    #             self.rec_paths.append(files[0])
-    #             self.outputsfolders.append(str(Path(outf) / f))
-    #         else:
-    #             rec2add = [r for r in files if f not in self.rec_paths]
-    #             self.rec_paths.extend(rec2add)
-    #             self.outputsfolders.extend([str(Path(outf) / f) for r in rec2add])
-
-    #     for ofolder in self.outputsfolders:
-    #         os.makedirs(ofolder, exist_ok=True)
-
-    #     if recording_labels is None:
-    #         self.recording_labels = self.rec_paths
-    #     else:
-    #         assert len(recording_labels) == len(
-    #             self.rec_paths
-    #         ), "Recordings and reconding labels should have same length"
-    #         self.recording_labels = recording_labels
-
-    #     # Lookig for multiplanes:
-    #     self.p_rec_paths = []
-    #     self.p_outputsfolders = []
-    #     self.p_recording_labels = []
-    #     self.focus_files = {}
-    #     self.efocus = []
-    #     for i, rec in enumerate(self.rec_paths):
-    #         raw_gpio_file = os.path.splitext(rec)[0] + ".gpio"  # raw data for gpio
-    #         updated_gpio_file = (
-    #             os.path.splitext(rec)[0] + "_gpio.isxd"
-    #         )  # after the first reading gpio is converted to this
-    #         local_updated_gpio_file = os.path.join(
-    #             self.outputsfolders[i], Path(updated_gpio_file).name
-    #         )  # new gpio copied in output
-    #         if os.path.exists(local_updated_gpio_file):
-    #             efocus = get_efocus(local_updated_gpio_file)
-    #         elif os.path.exists(updated_gpio_file):
-    #             efocus = get_efocus(updated_gpio_file)
-    #         elif os.path.exists(raw_gpio_file):
-    #             local_raw_gpio_file = os.path.join(
-    #                 self.outputsfolders[i], Path(raw_gpio_file).name
-    #             )
-    #             shutil.copy2(raw_gpio_file, local_raw_gpio_file)
-    #             efocus = get_efocus(local_raw_gpio_file)
-    #         else:
-    #             video = isx.Movie.read(rec)
-    #             get_acquisition_info = video.get_acquisition_info().copy()
-    #             del video  # usefull for windows
-    #             if "Microscope Focus" in get_acquisition_info:
-    #                 assert isx.verify_deinterleave(
-    #                     rec, get_acquisition_info["Microscope Focus"]
-    #                 ), f"Info {rec}: Multiple Microscope Focus but not gpio file"
-    #                 efocus = [get_acquisition_info["Microscope Focus"]]
-    #             else:
-    #                 efocus = [0]
-    #                 print(f"Info: Unable to verify Microscope Focus config in: {rec}")
-    #         if len(efocus) == 1:
-    #             self.focus_files[rec] = [rec]
-    #             self.p_rec_paths.append(rec)
-    #             self.p_recording_labels.append(self.recording_labels[i])
-    #             self.efocus.append(efocus)
-    #         else:
-    #             self.efocus.append(efocus)
-    #             pr = Path(rec)
-    #             efocus_filenames = [
-    #                 pr.stem + "_" + str(ef) + pr.suffix for ef in efocus
-    #             ]
-    #             self.focus_files[rec] = [
-    #                 str(Path(self.outputsfolders[i]) / Path(ef))
-    #                 for ef in efocus_filenames
-    #             ]
-    #             self.p_recording_labels.extend(
-    #                 [self.recording_labels[i] + f"_{ef}" for ef in efocus]
-    #             )
-    #             self.p_rec_paths.extend(self.focus_files[rec])
-    #         self.p_outputsfolders.extend([self.outputsfolders[i]] * len(efocus))
-
-    #     if files_list_log is not None:
-    #         file_handler_status = {
-    #             "input_parameters": input_parameters,
-    #             "computed_parameters": {
-    #                 "rec_subfolders": self.rec_subfolders,
-    #                 "outputsfolders": self.outputsfolders,
-    #                 "recording_labels": self.recording_labels,
-    #                 "rec_paths": self.rec_paths,
-    #                 "p_rec_paths": self.p_rec_paths,
-    #                 "p_outputsfolders": self.p_outputsfolders,
-    #                 "p_recording_labels": self.p_recording_labels,
-    #                 "focus_files": self.focus_files,
-    #                 "efocus": self.efocus,
-    #             },
-    #         }
-    #         with open(files_list_log, "w") as file:
-    #             json.dump(file_handler_status, file)
-
     def __init__(
         self,
         main_data_folder: Union[str, list] = ".",
@@ -278,7 +104,6 @@ class isx_files_handler:
                 # this will extend the single inputs
                 lists_inputs[k] = v * len_list
 
-        self.rec_subfolders = []
         self.outputsfolders = []
         self.rec_paths = []
         self.p_rec_paths = []
@@ -287,14 +112,13 @@ class isx_files_handler:
         self.focus_files = {}
         self.efocus = []
         meta = {
-            "rec_subfolders": [],
             "outputsfolders": [],
             "recording_labels": [],
             "rec_paths": [],
             "p_rec_paths": [],
             "p_outputsfolders": [],
             "p_recording_labels": [],
-            "focus_files": {},
+            "focus_files": [],
             "efocus": [],
         }
         for mainf, subfolder, fpatter, outf in zip(
@@ -304,7 +128,7 @@ class isx_files_handler:
             lists_inputs["outputsfolders"],
         ):
             if check_new_imputs:
-                # get_from_nas
+                # From NAS
                 files = glob(str(Path(mainf) / subfolder / fpatter), recursive=False)
                 assert len(files) > 0, "No file found for {}".format(
                     str(Path(mainf) / subfolder / fpatter)
@@ -316,14 +140,13 @@ class isx_files_handler:
                         str(Path(mainf) / subfolder / fpatter)
                     )
                 else:
-                    files = [r for r in files if r not in self.rec_paths]
+                    files = [r for r in files if r not in meta["rec_paths"]]
                 for file in files:
                     if not overwrite_metadata:
                         json_file = os.path.splitext(file)[0] + "_metadata.json"
                         if os.path.exists(json_file):
                             continue
                     metadata[file] = {
-                        "rec_subfolders": [],
                         "outputsfolders": [str(Path(outf) / subfolder)],
                         "recording_labels": [],
                         "rec_paths": [file],
@@ -343,6 +166,8 @@ class isx_files_handler:
                         metadata[file]["recording_labels"] = next(recording_labels_iter)
 
                     # # Lookig for multiplanes:
+                    for ofolder in metadata[file]["outputsfolders"]:
+                        os.makedirs(ofolder, exist_ok=True)
                     raw_gpio_file = (
                         os.path.splitext(file)[0] + ".gpio"
                     )  # raw data for gpio
@@ -378,60 +203,65 @@ class isx_files_handler:
                             print(
                                 f"Info: Unable to verify Microscope Focus config in: {file}"
                             )
-                        if len(efocus) == 1:
-                            metadata[file]["focus_files"][file] = [file]
-                            metadata[file]["p_rec_paths"].append(file)
-                            metadata[file]["p_recording_labels"].append(
-                                metadata[file]["recording_labels"][0]
-                            )
-                            metadata[file]["efocus"].append(efocus)
-                        else:
-                            metadata[file]["efocus"].append(efocus)
-                            pr = Path(file)
-                            efocus_filenames = [
-                                pr.stem + "_" + str(ef) + pr.suffix for ef in efocus
-                            ]
-                            self.focus_files[file] = [
-                                str(
-                                    Path(metadata[file]["outputsfolders"][0]) / Path(ef)
-                                )
-                                for ef in efocus_filenames
-                            ]
-                            self.p_recording_labels.extend(
-                                [
-                                    metadata[file]["recording_labels"][0] + f"_{ef}"
-                                    for ef in efocus
-                                ]
-                            )
-                            metadata[file]["p_rec_paths"].extend(
-                                metadata[file]["focus_files"][file]
-                            )
-                        metadata[file]["p_outputsfolders"].extend(
-                            [metadata[file]["outputsfolders"][0]] * len(efocus)
+                    if len(efocus) == 1:
+                        metadata[file]["focus_files"][file] = [file]
+                        metadata[file]["p_rec_paths"].append(file)
+                        metadata[file]["p_recording_labels"].append(
+                            metadata[file]["recording_labels"][0]
                         )
+                        metadata[file]["efocus"].append(efocus)
+                    else:
+                        metadata[file]["efocus"].append(efocus)
+                        pr = Path(file)
+                        efocus_filenames = [
+                            pr.stem + "_" + str(ef) + pr.suffix for ef in efocus
+                        ]
+                        metadata[file]["focus_files"][file] = [
+                            str(Path(metadata[file]["outputsfolders"][0]) / Path(ef))
+                            for ef in efocus_filenames
+                        ]
+                        metadata[file]["p_recording_labels"].extend(
+                            [
+                                metadata[file]["recording_labels"][0] + f"_{ef}"
+                                for ef in efocus
+                            ]
+                        )
+                        metadata[file]["p_rec_paths"].extend(
+                            metadata[file]["focus_files"][file]
+                        )
+                    metadata[file]["p_outputsfolders"].extend(
+                        [metadata[file]["outputsfolders"][0]] * len(efocus)
+                    )
 
-                for path, intern_data in metadata.items():
-                    json_file = os.path.splitext(path)[0] + "_metadata.json"
+                for raw_path, intern_data in metadata.items():
+                    json_file = os.path.join(
+                        intern_data["outputsfolders"][0],
+                        os.path.splitext(os.path.basename(raw_path))[0]
+                        + "_metadata.json",
+                    )
                     # if exist, is remove to write it again with the new data
                     if os.path.exists(json_file):
                         os.remove(json_file)
                     with open(json_file, "w") as j_file:
                         json.dump(intern_data, j_file)
                     for key, _ in intern_data.items():
-                        meta[key].extend(metadata[file][key])
+                        if key == "focus_files":
+                            for k, rec in intern_data[key].items():
+                                meta[key].extend(k)
+                        else:
+                            meta[key].extend(metadata[file][key])
             else:
-                assert overwrite_metadata, "Overwriting json file not possible"
-                fpatter = "_metadata.json"
-                files = glob(str(Path(outf) / subfolder / fpatter), recursive=False)
+                assert not overwrite_metadata, "Overwriting json file not possible"
+                fpatter = "*_metadata.json"
+                base_folder = os.path.join(outf, subfolder)
+                files = glob(os.path.join(base_folder, fpatter))
                 for f in files:
-                    with open(f) as file_data:
-                        for key, path in file_data:
-                            meta[key].extend(file_data[path[key]])
+                    with open(f, "r") as file_data:
+                        json_data = json.load(file_data)
+                        for key_j, value_j in json_data.items():
+                            meta[key_j].extend(value_j)
 
-            self.__dict__.update(meta)
-
-        for ofolder in self.outputsfolders:
-            os.makedirs(ofolder, exist_ok=True)
+        self.__dict__.update(meta)
 
     def de_interleave(self, overwrite: bool = False) -> None:
         """
