@@ -152,7 +152,6 @@ def remove_file_and_json(output: str) -> None:
         os.remove(json_file)
 
 
-# terminar, pasar como parametro el dirname, asi agrego con path.join
 def write_log_file(
     params: dict,
     dir_name: str,

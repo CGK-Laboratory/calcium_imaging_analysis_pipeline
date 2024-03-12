@@ -259,9 +259,6 @@ class isx_files_handler:
                         json.dump(intern_data, j_file)
                     for key, g in intern_data.items():
                         if key == "focus_files":
-                            #     for k, rec in intern_data[key].items():
-                            #         meta[key].extend(k)
-                            # elif key == "efocus":
                             meta[key].update(g)
                         elif key == "efocus":
                             meta[key].append(metadata[file][key])
