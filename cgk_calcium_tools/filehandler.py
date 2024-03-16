@@ -106,13 +106,6 @@ class isx_files_handler:
                 # this will extend the single inputs
                 lists_inputs[k] = v * len_list
 
-        self.outputsfolders = []
-        self.rec_paths = []
-        self.p_rec_paths = []
-        self.p_outputsfolders = []
-        self.p_recording_labels = []
-        self.focus_files = {}
-        self.efocus = []
         meta = {
             "outputsfolders": [],
             "recording_labels": [],
@@ -154,15 +147,6 @@ class isx_files_handler:
                             + "_metadata.json",
                         )
                         if os.path.exists(json_file):
-                            with open(json_file) as j_f:
-                                data = json.load(j_f)
-                                for key_j, value_j in data.items():
-                                    if key_j == "focus_files":
-                                        meta[key_j].update(value_j)
-                                    elif key_j == "efocus":
-                                        meta[key_j].append(value_j)
-                                    else:
-                                        meta[key_j].extend(value_j)
                             continue
                     video = isx.Movie.read(file)
                     metadata[file] = {
@@ -277,28 +261,21 @@ class isx_files_handler:
                         os.remove(json_file)
                     with open(json_file, "w") as j_file:
                         json.dump(intern_data, j_file)
-                    for key, g in intern_data.items():
-                        if key == "focus_files":
-                            meta[key].update(g)
-                        elif key == "efocus":
-                            meta[key].append(metadata[file][key])
-                        else:
-                            meta[key].extend(metadata[file][key])
             else:
                 assert not overwrite_metadata, "Overwriting json file not possible"
-                fpatter = "*_metadata.json"
-                base_folder = os.path.join(outf, subfolder)
-                files = glob(os.path.join(base_folder, fpatter))
-                for f in files:
-                    with open(f, "r") as file_data:
-                        json_data = json.load(file_data)
-                        for key_j, value_j in json_data.items():
-                            if key_j == "focus_files":
-                                meta[key_j].update(value_j)
-                            elif key_j == "efocus":
-                                meta[key_j].append(value_j)
-                            else:
-                                meta[key_j].extend(value_j)
+            fpatter = "*_metadata.json"
+            base_folder = os.path.join(outf, subfolder)
+            files = glob(os.path.join(base_folder, fpatter))
+            for f in files:
+                with open(f, "r") as file_data:
+                    json_data = json.load(file_data)
+                    for key_j, value_j in json_data.items():
+                        if key_j == "focus_files":
+                            meta[key_j].update(value_j)
+                        elif key_j == "efocus":
+                            meta[key_j].append(value_j)
+                        else:
+                            meta[key_j].extend(value_j)
         self.__dict__.update(meta)
 
     def de_interleave(self, overwrite: bool = False) -> None:
