@@ -148,11 +148,21 @@ class isx_files_handler:
                     files = [r for r in files if r not in meta["rec_paths"]]
                 for file in files:
                     if not overwrite_metadata:
-                        json_file = os.path.splitext(file)[0] + "_metadata.json"
+                        json_file = os.path.join(
+                            str(Path(outf) / subfolder),
+                            os.path.splitext(os.path.basename(file))[0]
+                            + "_metadata.json",
+                        )
                         if os.path.exists(json_file):
                             with open(json_file) as j_f:
                                 data = json.load(j_f)
-                                meta.update(data)
+                                for key_j, value_j in data.items():
+                                    if key_j == "focus_files":
+                                        meta[key_j].update(value_j)
+                                    elif key_j == "efocus":
+                                        meta[key_j].append(value_j)
+                                    else:
+                                        meta[key_j].extend(value_j)
                             continue
                     video = isx.Movie.read(file)
                     metadata[file] = {
@@ -256,7 +266,6 @@ class isx_files_handler:
                     metadata[file]["p_outputsfolders"].extend(
                         [metadata[file]["outputsfolders"][0]] * len(efocus)
                     )
-
                 for raw_path, intern_data in metadata.items():
                     json_file = os.path.join(
                         intern_data["outputsfolders"][0],
