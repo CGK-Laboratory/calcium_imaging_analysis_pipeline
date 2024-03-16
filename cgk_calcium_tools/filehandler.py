@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from glob import glob
+import warnings
 import numpy as np
 import isx
 import json
@@ -54,7 +55,8 @@ class isx_files_handler:
     parameters_path: str, optional
         Path with the information of the default parameter. If it does not exist, an error occurs.
         By default "default_parameter.json" in the same folder as this file.
-
+     overwrite_metadata: bool, optional
+        If True overwrite metadata json file. By default False.
     """
 
     def __init__(
@@ -148,6 +150,9 @@ class isx_files_handler:
                     if not overwrite_metadata:
                         json_file = os.path.splitext(file)[0] + "_metadata.json"
                         if os.path.exists(json_file):
+                            with open(json_file) as j_f:
+                                data = json.load(j_f)
+                                meta.update(data)
                             continue
                     video = isx.Movie.read(file)
                     metadata[file] = {
@@ -204,18 +209,24 @@ class isx_files_handler:
                         efocus = get_efocus(local_raw_gpio_file)
                     else:
                         get_acquisition_info = video.get_acquisition_info().copy()
-                        del video  # usefull for windows
                         if "Microscope Focus" in get_acquisition_info:
-                            assert isx.verify_deinterleave(
+                            if not isx.verify_deinterleave(
                                 file, get_acquisition_info["Microscope Focus"]
-                            ), f"Info {file}: Multiple Microscope Focus but not gpio file"
-                            efocus = [get_acquisition_info["Microscope Focus"]]
+                            ):
+                                warnings.warn(
+                                    f"Info {file}: Multiple Microscope Focus but not gpio file",
+                                    Warning,
+                                )
+                                efocus = [0]
+                            else:
+                                efocus = [get_acquisition_info["Microscope Focus"]]
                         else:
                             efocus = [0]
                             print(
                                 f"Info: Unable to verify Microscope Focus config in: {file}"
                             )
                     video.flush()
+                    del video  # usefull for windows
                     if len(efocus) == 1:
                         metadata[file]["focus_files"][file] = [file]
                         metadata[file]["p_rec_paths"].append(file)
@@ -279,7 +290,6 @@ class isx_files_handler:
                                 meta[key_j].append(value_j)
                             else:
                                 meta[key_j].extend(value_j)
-
         self.__dict__.update(meta)
 
     def de_interleave(self, overwrite: bool = False) -> None:
