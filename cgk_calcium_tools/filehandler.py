@@ -1,3 +1,4 @@
+import copy
 import os
 from pathlib import Path
 from glob import glob
@@ -149,25 +150,16 @@ class isx_files_handler:
                         if os.path.exists(json_file):
                             continue
                     video = isx.Movie.read(file)
-                    metadata[file] = {
-                        "outputsfolders": [str(Path(outf) / subfolder)],
-                        "recording_labels": [],
-                        "rec_paths": [file],
-                        "p_rec_paths": [],
-                        "p_outputsfolders": [],
-                        "p_recording_labels": [],
-                        "focus_files": {},
-                        "efocus": [],
-                        "resolution": [video.spacing.num_pixels],
-                        "duration": [
-                            video.timing.num_samples
-                            * video.timing.period.to_usecs()
-                            / 1e6
-                        ],
-                        "frames_per_second": [
-                            1 / (video.timing.period.to_usecs() / 1e6)
-                        ],
-                    }
+                    metadata[file] = copy.deepcopy(meta)
+                    metadata[file]["outputsfolders"] = [str(Path(outf) / subfolder)]
+                    metadata[file]["rec_paths"] = [file]
+                    metadata[file]["resolution"] = [video.spacing.num_pixels]
+                    metadata[file]["duration"] = [
+                        video.timing.num_samples * video.timing.period.to_usecs() / 1e6
+                    ]
+                    metadata[file]["frames_per_second"] = [
+                        1 / (video.timing.period.to_usecs() / 1e6)
+                    ]
 
                     if recording_labels is None:
                         metadata[file]["recording_labels"] = metadata[file]["rec_paths"]
