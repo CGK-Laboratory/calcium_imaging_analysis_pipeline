@@ -319,9 +319,7 @@ class isx_files_handler:
 
         """
         print("de_interleaving movies, please wait...")
-        for (main_file, planes_fs), focus, key in zip(
-            self.focus_files.items(), self.efocus, self.focus_files
-        ):
+        for (main_file, planes_fs), focus in zip(self.focus_files.items(), self.efocus):
             data = {"main_file": main_file, "planes_fs": planes_fs, "focus": focus}
             if len(focus) > 1:  # has multiplane
                 existing_files = []
