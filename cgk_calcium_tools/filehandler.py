@@ -319,21 +319,21 @@ class isx_files_handler:
 
         """
         print("de_interleaving movies, please wait...")
-        for (main_file, planes_fs), focus, out, key in zip(
-            self.focus_files.items(), self.efocus, self.outputsfolders, self.focus_files
+        for (main_file, planes_fs), focus, key in zip(
+            self.focus_files.items(), self.efocus, self.focus_files
         ):
             data = {"main_file": main_file, "planes_fs": planes_fs, "focus": focus}
             if len(focus) > 1:  # has multiplane
                 existing_files = []
-                json_file = os.path.join(
-                    out,
-                    os.path.splitext(os.path.basename(key))[0] + "_de_interleave.json",
-                )
                 for sp_file in planes_fs:
-                    print(sp_file)
                     if os.path.exists(sp_file):
                         if overwrite:
                             os.remove(sp_file)
+                            json_file = (
+                                os.path.basename(sp_file) + "_de_interleave.json"
+                            )
+                            if os.path.exists(json_file):
+                                os.remove(sp_file)
                         else:
                             existing_files.append(sp_file)
             if len(existing_files) != len(planes_fs):  # has files to run
@@ -357,9 +357,9 @@ class isx_files_handler:
                     print("Reading: ", main_file)
                     print("Writting: ", planes_fs)
                     raise err
-                if overwrite or not os.path.exists(json_file):
-                    if os.path.exists(json_file):
-                        os.remove(json_file)
+                if not os.path.exists(
+                    json_file
+                ):  # if ovwewrite, it was already removed. If an error cames it does not get here
                     with open(json_file, "w") as file:
                         json.dump(data, file)
 
