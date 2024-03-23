@@ -1,10 +1,12 @@
+import copy
 import os
 from pathlib import Path
 from glob import glob
+import warnings
 import numpy as np
 import isx
 import json
-from typing import Union, Tuple
+from typing import Union, Tuple, Iterable
 from .processing import fix_frames
 import pandas as pd
 import shutil
@@ -14,7 +16,6 @@ from .files_io import (
     same_json_or_remove,
     json_filename,
 )
-from typing import Iterable
 
 
 def ifstr2list(x) -> list:
@@ -54,7 +55,8 @@ class isx_files_handler:
     parameters_path: str, optional
         Path with the information of the default parameter. If it does not exist, an error occurs.
         By default "default_parameter.json" in the same folder as this file.
-
+     overwrite_metadata: bool, optional
+        If True overwrite metadata json file. By default False.
     """
 
     def __init__(
@@ -65,39 +67,23 @@ class isx_files_handler:
         files_patterns: Union[str, list] = ".isx",
         processing_steps: list = ["PP", "TR", "BP", "MC"],
         one_file_per_folder: bool = True,
-        recording_labels: Union[str, None] = None,
-        files_list_log: Union[str, None] = None,
+        recording_labels: Union[list, None] = None,
+        check_new_imputs: bool = True,
         parameters_path: str = os.path.join(
             os.path.dirname(__file__), "default_parameter.json"
         ),
-    ) -> None:
+        overwrite_metadata: bool = False,
+    ):
         self.processing_steps = processing_steps
         assert os.path.exists(parameters_path), "parameters file does not exist"
+        with open(parameters_path) as file:
+            self.default_parameters = json.load(file)
         assert (
             len([s for s in processing_steps if s.startswith("TR")]) <= 1
         ), "Pipeline can't handle multiple trims"
-        with open(parameters_path) as file:
-            self.default_parameters = json.load(file)
 
-        if files_list_log is not None:
-            input_parameters = {
-                "main_data_folder": main_data_folder,
-                "outputsfolders": outputsfolders,
-                "data_subfolders": data_subfolders,
-                "files_patterns": files_patterns,
-                "one_file_per_folder": one_file_per_folder,
-                "recording_labels": recording_labels,
-            }
-            if os.path.exists(files_list_log):
-                with open(files_list_log, "r") as file:
-                    file_handler_status = json.load(file)
-
-                if file_handler_status["input_parameters"] == input_parameters:
-                    self.__dict__.update(file_handler_status["computed_parameters"])
-                else:
-                    os.remove(files_list_log)
-                return
-
+        if recording_labels is not None:
+            recording_labels_iter = iter(recording_labels)
         lists_inputs = {
             "main_data_folder": ifstr2list(main_data_folder),
             "outputsfolders": ifstr2list(outputsfolders),
@@ -109,7 +95,7 @@ class isx_files_handler:
 
         if len(len_list_variables) > 0:
             assert (
-                len(np.unique(len_list_variables)) == 1
+                len((len_list_variables)) == 1
             ), "the list inputs should have the same length"
             len_list = len_list_variables[0]
         else:
@@ -120,116 +106,168 @@ class isx_files_handler:
                 # this will extend the single inputs
                 lists_inputs[k] = v * len_list
 
-        self.rec_subfolders = []
-        self.outputsfolders = []
-        self.rec_paths = []
-        for mainf, f, fpatter, outf in zip(
+        meta = {
+            "outputsfolders": [],
+            "recording_labels": [],
+            "rec_paths": [],
+            "p_rec_paths": [],
+            "p_outputsfolders": [],
+            "p_recording_labels": [],
+            "focus_files": {},
+            "efocus": [],
+            "resolution": [],
+            "duration": [],
+            "frames_per_second": [],
+        }
+        for mainf, subfolder, fpatter, outf in zip(
             lists_inputs["main_data_folder"],
             lists_inputs["data_subfolders"],
             lists_inputs["files_patterns"],
             lists_inputs["outputsfolders"],
         ):
-            files = glob(str(Path(mainf) / f / fpatter), recursive=False)
-            assert len(files) > 0, "No file found for {}.".format(
-                str(Path(mainf) / f / fpatter)
-            )
-            if one_file_per_folder:
-                assert len(files) == 1, "Multiple files found for {}.".format(
-                    str(Path(mainf) / f / fpatter)
+            if check_new_imputs:
+                # From raw data origin
+                files = glob(str(Path(mainf) / subfolder / fpatter), recursive=False)
+                assert len(files) > 0, "No file found for {}".format(
+                    str(Path(mainf) / subfolder / fpatter)
                 )
+                metadata = {}
 
-                self.rec_paths.append(files[0])
-                self.outputsfolders.append(str(Path(outf) / f))
-            else:
-                rec2add = [r for r in files if f not in self.rec_paths]
-                self.rec_paths.extend(rec2add)
-                self.outputsfolders.extend([str(Path(outf) / f) for r in rec2add])
-
-        for ofolder in self.outputsfolders:
-            os.makedirs(ofolder, exist_ok=True)
-
-        if recording_labels is None:
-            self.recording_labels = self.rec_paths
-        else:
-            assert len(recording_labels) == len(
-                self.rec_paths
-            ), "Recordings and reconding labels should have same length"
-            self.recording_labels = recording_labels
-
-        # Lookig for multiplanes:
-        self.p_rec_paths = []
-        self.p_outputsfolders = []
-        self.p_recording_labels = []
-        self.focus_files = {}
-        self.efocus = []
-        for i, rec in enumerate(self.rec_paths):
-            raw_gpio_file = os.path.splitext(rec)[0] + ".gpio"  # raw data for gpio
-            updated_gpio_file = (
-                os.path.splitext(rec)[0] + "_gpio.isxd"
-            )  # after the first reading gpio is converted to this
-            local_updated_gpio_file = os.path.join(
-                self.outputsfolders[i], Path(updated_gpio_file).name
-            )  # new gpio copied in output
-            if os.path.exists(local_updated_gpio_file):
-                efocus = get_efocus(local_updated_gpio_file)
-            elif os.path.exists(updated_gpio_file):
-                efocus = get_efocus(updated_gpio_file)
-            elif os.path.exists(raw_gpio_file):
-                local_raw_gpio_file = os.path.join(
-                    self.outputsfolders[i], Path(raw_gpio_file).name
-                )
-                shutil.copy2(raw_gpio_file, local_raw_gpio_file)
-                efocus = get_efocus(local_raw_gpio_file)
-            else:
-                video = isx.Movie.read(rec)
-                get_acquisition_info = video.get_acquisition_info().copy()
-                del video  # usefull for windows
-                if "Microscope Focus" in get_acquisition_info:
-                    assert isx.verify_deinterleave(
-                        rec, get_acquisition_info["Microscope Focus"]
-                    ), f"Info {rec}: Multiple Microscope Focus but not gpio file"
-                    efocus = [get_acquisition_info["Microscope Focus"]]
+                if one_file_per_folder:
+                    assert len(files) == 1, "Multiple files found for {}.".format(
+                        str(Path(mainf) / subfolder / fpatter)
+                    )
                 else:
-                    efocus = [0]
-                    print(f"Info: Unable to verify Microscope Focus config in: {rec}")
-            if len(efocus) == 1:
-                self.focus_files[rec] = [rec]
-                self.p_rec_paths.append(rec)
-                self.p_recording_labels.append(self.recording_labels[i])
-                self.efocus.append(efocus)
-            else:
-                self.efocus.append(efocus)
-                pr = Path(rec)
-                efocus_filenames = [
-                    pr.stem + "_" + str(ef) + pr.suffix for ef in efocus
-                ]
-                self.focus_files[rec] = [
-                    str(Path(self.outputsfolders[i]) / Path(ef))
-                    for ef in efocus_filenames
-                ]
-                self.p_recording_labels.extend(
-                    [self.recording_labels[i] + f"_{ef}" for ef in efocus]
-                )
-                self.p_rec_paths.extend(self.focus_files[rec])
-            self.p_outputsfolders.extend([self.outputsfolders[i]] * len(efocus))
+                    files = [r for r in files if r not in meta["rec_paths"]]
+                for file in files:
+                    if not overwrite_metadata:
+                        json_file = os.path.join(
+                            str(Path(outf) / subfolder),
+                            os.path.splitext(os.path.basename(file))[0]
+                            + "_metadata.json",
+                        )
+                        if os.path.exists(json_file):
+                            continue
+                    video = isx.Movie.read(file)
+                    metadata[file] = copy.deepcopy(meta)
+                    metadata[file]["outputsfolders"] = [str(Path(outf) / subfolder)]
+                    metadata[file]["rec_paths"] = [file]
+                    metadata[file]["resolution"] = [video.spacing.num_pixels]
+                    metadata[file]["duration"] = [
+                        video.timing.num_samples * video.timing.period.to_usecs() / 1e6
+                    ]
+                    metadata[file]["frames_per_second"] = [
+                        1 / (video.timing.period.to_usecs() / 1e6)
+                    ]
 
-        if files_list_log is not None:
-            file_handler_status = {
-                "input_parameters": input_parameters,
-                "computed_parameters": {
-                    "rec_subfolders": self.rec_subfolders,
-                    "outputsfolders": self.outputsfolders,
-                    "recording_labels": self.recording_labels,
-                    "rec_paths": self.rec_paths,
-                    "p_rec_paths": self.p_rec_paths,
-                    "p_outputsfolders": self.p_outputsfolders,
-                    "p_recording_labels": self.p_recording_labels,
-                    "focus_files": self.focus_files,
-                    "efocus": self.efocus,
-                },
-            }
-            with open(files_list_log, "w") as file:
-                json.dump(file_handler_status, file)
+                    if recording_labels is None:
+                        metadata[file]["recording_labels"] = metadata[file]["rec_paths"]
+                    else:
+                        assert not one_file_per_folder, "Multiple files found with {}. Recording labels not supported.".format(
+                            str(Path(mainf) / subfolder / fpatter)
+                        )
+                        metadata[file]["recording_labels"] = next(recording_labels_iter)
+
+                    # # Lookig for multiplanes:
+                    for ofolder in metadata[file]["outputsfolders"]:
+                        os.makedirs(ofolder, exist_ok=True)
+                    raw_gpio_file = (
+                        os.path.splitext(file)[0] + ".gpio"
+                    )  # raw data for gpio
+                    updated_gpio_file = (
+                        os.path.splitext(file)[0] + "_gpio.isxd"
+                    )  # after the first reading gpio is converted to this
+                    local_updated_gpio_file = os.path.join(
+                        metadata[file]["outputsfolders"][0],
+                        Path(updated_gpio_file).name,
+                    )  # new gpio copied in output
+                    if os.path.exists(local_updated_gpio_file):
+                        efocus = get_efocus(local_updated_gpio_file)
+                    elif os.path.exists(updated_gpio_file):
+                        efocus = get_efocus(updated_gpio_file)
+                    elif os.path.exists(raw_gpio_file):
+                        local_raw_gpio_file = os.path.join(
+                            metadata[file]["outputsfolders"][0],
+                            Path(raw_gpio_file).name,
+                        )
+                        shutil.copy2(raw_gpio_file, local_raw_gpio_file)
+                        efocus = get_efocus(local_raw_gpio_file)
+                    else:
+                        get_acquisition_info = video.get_acquisition_info().copy()
+                        if "Microscope Focus" in get_acquisition_info:
+                            if not isx.verify_deinterleave(
+                                file, get_acquisition_info["Microscope Focus"]
+                            ):
+                                warnings.warn(
+                                    f"Info {file}: Multiple Microscope Focus but not gpio file",
+                                    Warning,
+                                )
+                                efocus = [0]
+                            else:
+                                efocus = [get_acquisition_info["Microscope Focus"]]
+                        else:
+                            efocus = [0]
+                            print(
+                                f"Info: Unable to verify Microscope Focus config in: {file}"
+                            )
+                    video.flush()
+                    del video  # usefull for windows
+                    if len(efocus) == 1:
+                        metadata[file]["focus_files"][file] = [file]
+                        metadata[file]["p_rec_paths"].append(file)
+                        metadata[file]["p_recording_labels"].append(
+                            metadata[file]["recording_labels"][0]
+                        )
+                        metadata[file]["efocus"].extend(efocus)
+                    else:
+                        metadata[file]["efocus"].extend(efocus)
+                        pr = Path(file)
+                        efocus_filenames = [
+                            pr.stem + "_" + str(ef) + pr.suffix for ef in efocus
+                        ]
+                        metadata[file]["focus_files"][file] = [
+                            str(Path(metadata[file]["outputsfolders"][0]) / Path(ef))
+                            for ef in efocus_filenames
+                        ]
+                        metadata[file]["p_recording_labels"].extend(
+                            [
+                                metadata[file]["recording_labels"][0] + f"_{ef}"
+                                for ef in efocus
+                            ]
+                        )
+                        metadata[file]["p_rec_paths"].extend(
+                            metadata[file]["focus_files"][file]
+                        )
+                    metadata[file]["p_outputsfolders"].extend(
+                        [metadata[file]["outputsfolders"][0]] * len(efocus)
+                    )
+                for raw_path, intern_data in metadata.items():
+                    json_file = os.path.join(
+                        intern_data["outputsfolders"][0],
+                        os.path.splitext(os.path.basename(raw_path))[0]
+                        + "_metadata.json",
+                    )
+                    # if exist, is remove to write it again with the new data
+                    if os.path.exists(json_file):
+                        os.remove(json_file)
+                    with open(json_file, "w") as j_file:
+                        json.dump(intern_data, j_file)
+            else:
+                assert not overwrite_metadata, "Overwriting json file not possible"
+            fpatter = "*_metadata.json"
+            base_folder = os.path.join(outf, subfolder)
+            files = glob(os.path.join(base_folder, fpatter))
+            for f in files:
+                with open(f, "r") as file_data:
+                    json_data = json.load(file_data)
+                    for key_j, value_j in json_data.items():
+                        if key_j == "focus_files":
+                            meta[key_j].update(value_j)
+                        elif key_j == "efocus":
+                            meta[key_j].append(value_j)
+                        else:
+                            meta[key_j].extend(value_j)
+        self.__dict__.update(meta)
 
     def de_interleave(self, overwrite: bool = False) -> None:
         """
@@ -565,7 +603,10 @@ class isx_files_handler:
             self.get_results_filenames(input_name, op=operation),
             self.get_results_filenames(output_name, op=operation),
         ):
-            new_data = {"input_movie_files": input, "output_image_file": output}
+            new_data = {
+                "input_movie_files": os.path.basename(input),
+                "output_image_file": os.path.basename(output),
+            }
             parameters.update(new_data)
             if same_json_or_remove(
                 parameters,
@@ -574,9 +615,16 @@ class isx_files_handler:
                 verbose=verbose,
             ):
                 continue
-            isx.project_movie(**del_keys(parameters, ["comments"]))
+            isx.project_movie(
+                **parameters_for_isx(
+                    parameters,
+                    ["comments"],
+                    {"input_movie_files": input, "output_image_file": output},
+                )
+            )
             write_log_file(
                 parameters,
+                os.path.dirname(output),
                 {"function": "project_movie"},
                 input_files_keys=["input_movie_files"],
                 output_file_key="output_image_file",
@@ -612,7 +660,10 @@ class isx_files_handler:
         for input, output in zip(
             self.get_filenames(op=None), self.get_results_filenames("dff", op=None)
         ):
-            new_data = {"input_movie_files": input, "output_movie_files": output}
+            new_data = {
+                "input_movie_files": os.path.basename(input),
+                "output_movie_files": os.path.basename(output),
+            }
             parameters.update(new_data)
             if same_json_or_remove(
                 parameters,
@@ -621,9 +672,16 @@ class isx_files_handler:
                 verbose=verbose,
             ):
                 continue
-            isx.dff(**del_keys(parameters, ["comments"]))
+            isx.dff(
+                **parameters_for_isx(
+                    parameters,
+                    ["comments"],
+                    {"input_movie_files": input, "output_movie_files": output},
+                )
+            )
             write_log_file(
                 parameters,
+                os.path.dirname(output),
                 {"function": "dff"},
                 input_files_keys=["input_movie_files"],
                 output_file_key="output_movie_files",
@@ -698,7 +756,10 @@ class isx_files_handler:
                         os.remove(json_file)
 
         for input, output in zip(inputs_files, cellsets):
-            new_data = {"input_movie_files": input, "output_cell_set_files": output}
+            new_data = {
+                "input_movie_files": os.path.basename(input),
+                "output_cell_set_files": os.path.basename(output),
+            }
             parameters.update(new_data)
             if same_json_or_remove(
                 parameters,
@@ -707,7 +768,13 @@ class isx_files_handler:
                 verbose=verbose,
             ):
                 continue
-            cell_det_fn(**del_keys(parameters, ["comments"]))
+            cell_det_fn(
+                **parameters_for_isx(
+                    parameters,
+                    ["comments"],
+                    {"input_movie_files": input, "output_cell_set_files": output},
+                )
+            )
 
             if not os.path.exists(output):
                 print(
@@ -725,6 +792,7 @@ class isx_files_handler:
 
             write_log_file(
                 parameters,
+                os.path.dirname(output),
                 {"function": alg},
                 input_files_keys=["input_movie_files"],
                 output_file_key="output_cell_set_files",
@@ -741,7 +809,10 @@ class isx_files_handler:
         for input, output in zip(
             cellsets, self.get_results_filenames(f"{cellsetname}-ED", op=None)
         ):
-            new_data = {"input_cell_set_files": input, "output_event_set_files": output}
+            new_data = {
+                "input_cell_set_files": os.path.basename(input),
+                "output_event_set_files": os.path.basename(output),
+            }
             ed_parameters.update(new_data)
             if same_json_or_remove(
                 ed_parameters,
@@ -751,7 +822,16 @@ class isx_files_handler:
             ):
                 continue
             try:
-                isx.event_detection(**del_keys(ed_parameters, ["comments"]))
+                isx.event_detection(
+                    **parameters_for_isx(
+                        ed_parameters,
+                        ["comments"],
+                        {
+                            "input_cell_set_files": input,
+                            "output_event_set_files": output,
+                        },
+                    )
+                )
             except Exception as e:
                 print(
                     f"Warning: Event_detection, failed to create file: {output}.\n"
@@ -764,6 +844,7 @@ class isx_files_handler:
                 del cell_set
             write_log_file(
                 ed_parameters,
+                os.path.dirname(output),
                 {"function": "event_detection"},
                 input_files_keys=["input_cell_set_files"],
                 output_file_key="output_event_set_files",
@@ -785,18 +866,31 @@ class isx_files_handler:
             self.get_results_filenames(f"{cellsetname}-accept_reject", op=None),
         ):
             new_data = {
-                "input_cell_set_files": input_cs,
-                "input_event_set_files": input_ev,
+                "input_cell_set_files": os.path.basename(input_cs),
+                "input_event_set_files": os.path.basename(input_ev),
             }
             ar_parameters.update(new_data)
             try:
-                isx.auto_accept_reject(**del_keys(ar_parameters, ["comments"]))
+                isx.auto_accept_reject(
+                    **parameters_for_isx(
+                        ar_parameters,
+                        ["comments"],
+                        {
+                            "input_cell_set_files": input_cs,
+                            "input_event_set_files": input_ev,
+                        },
+                    )
+                )
             except Exception as e:
                 if verbose:
                     print(e)
             write_log_file(
                 ar_parameters,
-                {"function": "accept_reject", "config_json": config_json},
+                os.path.dirname(config_json),
+                {
+                    "function": "accept_reject",
+                    "config_json": os.path.basename(config_json),
+                },
                 input_files_keys=["input_cell_set_files", "input_event_set_files"],
                 output_file_key="config_json",
             )
@@ -835,9 +929,9 @@ class isx_files_handler:
             )[0]
 
             new_data = {
-                "input_cell_set_files": input_cell_set_files,
-                "output_cell_set_file": output_cell_set_file,
-                "auto_accept_reject": ar_cell_set_file,
+                "input_cell_set_files": os.path.basename(input_cell_set_files),
+                "output_cell_set_file": os.path.basename(output_cell_set_file),
+                "auto_accept_reject": os.path.basename(ar_cell_set_file),
             }
             mpr_parameters.update(new_data)
 
@@ -849,7 +943,15 @@ class isx_files_handler:
             ):
                 try:
                     isx.multiplane_registration(
-                        **del_keys(mpr_parameters, ["comments", "auto_accept_reject"])
+                        **parameters_for_isx(
+                            mpr_parameters,
+                            ["comments", "auto_accept_reject"],
+                            {
+                                "input_cell_set_files": input_cell_set_files,
+                                "output_cell_set_file": output_cell_set_file,
+                                "auto_accept_reject": ar_cell_set_file,
+                            },
+                        )
                     )
 
                 except Exception as e:
@@ -880,6 +982,7 @@ class isx_files_handler:
 
                 write_log_file(
                     mpr_parameters,
+                    os.path.dirname(output_cell_set_file),
                     {"function": "multiplane_registration"},
                     input_files_keys=["input_cell_set_files", "auto_accept_reject"],
                     output_file_key="output_cell_set_file",
@@ -887,8 +990,8 @@ class isx_files_handler:
 
             # event detection in registered cellset
             new_data = {
-                "input_cell_set_files": output_cell_set_file,
-                "output_event_set_files": ed_file,
+                "input_cell_set_files": os.path.basename(output_cell_set_file),
+                "output_event_set_files": os.path.basename(ed_file),
             }
             ed_parameters.update(new_data)
             if not same_json_or_remove(
@@ -898,7 +1001,16 @@ class isx_files_handler:
                 input_files_keys=["input_cell_set_files"],
             ):
                 try:
-                    isx.event_detection(**del_keys(ed_parameters, ["comments"]))
+                    isx.event_detection(
+                        **parameters_for_isx(
+                            ed_parameters,
+                            ["comments"],
+                            {
+                                "input_cell_set_files": output_cell_set_file,
+                                "output_event_set_files": ed_file,
+                            },
+                        )
+                    )
                 except Exception as e:
                     print(
                         f"Warning: Event_detection, failed to create file: {ed_file}.\n"
@@ -912,23 +1024,34 @@ class isx_files_handler:
 
                 write_log_file(
                     ed_parameters,
+                    os.path.dirname(output_cell_set_file),
                     {"function": "event_detection"},
                     input_files_keys=["input_cell_set_files"],
                     output_file_key="output_event_set_files",
                 )
             # auto accept reject
             new_data = {
-                "input_cell_set_files": output_cell_set_file,
-                "input_event_set_files": ed_file,
+                "input_cell_set_files": os.path.basename(output_cell_set_file),
+                "input_event_set_files": os.path.basename(ed_file),
             }
             ar_parameters.update(new_data)
             try:
-                isx.auto_accept_reject(**del_keys(ar_parameters, ["comments"]))
+                isx.auto_accept_reject(
+                    **parameters_for_isx(
+                        ar_parameters,
+                        ["comments"],
+                        {
+                            "input_cell_set_files": output_cell_set_file,
+                            "input_event_set_files": ed_file,
+                        },
+                    )
+                )
             except Exception as e:
                 if verbose:
                     print(e)
             write_log_file(
                 ar_parameters,
+                os.path.dirname(output_cell_set_file),
                 {"function": "accept_reject", "config_json": ar_cell_set_file},
                 input_files_keys=["input_cell_set_files", "input_event_set_files"],
                 output_file_key="config_json",
@@ -966,9 +1089,9 @@ class isx_files_handler:
 
         for cellset, ed, metric in zip(cell_set_files, ed_files, metrics_files):
             inputs_args = {
-                "input_cell_set_files": cellset,
-                "input_event_set_files": ed,
-                "output_metrics_files": metric,
+                "input_cell_set_files": os.path.basename(cellset),
+                "input_event_set_files": os.path.basename(ed),
+                "output_metrics_files": os.path.basename(metric),
             }
             if not same_json_or_remove(
                 inputs_args,
@@ -977,11 +1100,21 @@ class isx_files_handler:
                 input_files_keys=["input_cell_set_files", "input_event_set_files"],
             ):
                 try:
-                    isx.cell_metrics(**inputs_args)
+                    isx.cell_metrics(
+                        **parameters_for_isx(
+                            inputs_args,
+                            to_update={
+                                "input_cell_set_files": cellset,
+                                "input_event_set_files": ed,
+                                "output_metrics_files": metric,
+                            },
+                        )
+                    )
                 except Exception as e:
                     print(e)
                 write_log_file(
                     inputs_args,
+                    os.path.dirname(metric),
                     {"function": "cell_metrics"},
                     input_files_keys=["input_cell_set_files", "input_event_set_files"],
                     output_file_key="output_metrics_files",
@@ -1140,10 +1273,10 @@ def motion_correct_step(
     """
     for i, (input, output) in enumerate(pairlist):
         new_data = {
-            "input_movie_files": input,
-            "output_movie_files": output,
-            "output_translation_files": translation_files[i],
-            "output_crop_rect_file": crop_rect_files[i],
+            "input_movie_files": os.path.basename(input),
+            "output_movie_files": os.path.basename(output),
+            "output_translation_files": os.path.basename(translation_files[i]),
+            "output_crop_rect_file": os.path.basename(crop_rect_files[i]),
         }
         parameters.update(new_data)
         if same_json_or_remove(
@@ -1154,9 +1287,21 @@ def motion_correct_step(
         ):
             continue
 
-        isx.motion_correct(**del_keys(parameters, ["comments"]))
+        isx.motion_correct(
+            **parameters_for_isx(
+                parameters,
+                ["comments"],
+                {
+                    "input_movie_files": input,
+                    "output_movie_files": output,
+                    "output_translation_files": translation_files[i],
+                    "output_crop_rect_file": crop_rect_files[i],
+                },
+            )
+        )
         write_log_file(
             parameters,
+            os.path.dirname(output),
             {"function": "motion_correct"},
             input_files_keys=["input_movie_files"],
             output_file_key="output_movie_files",
@@ -1202,7 +1347,12 @@ def preprocess_step(
                 resolution[idx_resolution] / float(value)
             )
 
-        parameters.update({"input_movie_files": input, "output_movie_files": output})
+        parameters.update(
+            {
+                "input_movie_files": os.path.basename(input),
+                "output_movie_files": os.path.basename(output),
+            }
+        )
         if same_json_or_remove(
             parameters,
             input_files_keys=["input_movie_files"],
@@ -1210,11 +1360,18 @@ def preprocess_step(
             verbose=verbose,
         ):
             continue
-        isx.preprocess(**del_keys(parameters, ["comments", "fix_frames_th_std"]))
+        isx.preprocess(
+            **parameters_for_isx(
+                parameters,
+                ["comments", "fix_frames_th_std"],
+                {"input_movie_files": input, "output_movie_files": output},
+            )
+        )
         nfixed = fix_frames(output, std_th=parameters["fix_frames_th_std"], report=True)
 
         write_log_file(
             parameters,
+            os.path.dirname(output),
             {"function": "preprocess"},
             input_files_keys=["input_movie_files"],
             output_file_key="output_movie_files",
@@ -1245,7 +1402,12 @@ def spatial_filter_step(
 
     """
     for input, output in pairlist:
-        parameters.update({"input_movie_files": input, "output_movie_files": output})
+        parameters.update(
+            {
+                "input_movie_files": os.path.basename(input),
+                "output_movie_files": os.path.basename(output),
+            }
+        )
         if same_json_or_remove(
             parameters,
             input_files_keys=["input_movie_files"],
@@ -1253,9 +1415,16 @@ def spatial_filter_step(
             verbose=verbose,
         ):
             continue
-        isx.spatial_filter(**del_keys(parameters, ["comments"]))
+        isx.spatial_filter(
+            **parameters_for_isx(
+                parameters,
+                ["comments"],
+                {"input_movie_files": input, "output_movie_files": output},
+            )
+        )
         write_log_file(
             parameters,
+            os.path.dirname(output),
             {"function": "spatial_filter"},
             input_files_keys=["input_movie_files"],
             output_file_key="output_movie_files",
@@ -1289,7 +1458,10 @@ def trim_movie(
         user_parameters["video_len"] is not None
     ), "Trim movie requires parameter video len"
     for input, output in pairlist:
-        parameters = {"input_movie_file": input, "output_movie_file": output}
+        parameters = {
+            "input_movie_file": os.path.basename(input),
+            "output_movie_file": os.path.basename(output),
+        }
         movie = isx.Movie.read(input)
         sr = 1 / (movie.timing.period.to_msecs() / 1000)
         endframe = user_parameters["video_len"] * sr
@@ -1303,11 +1475,18 @@ def trim_movie(
             verbose=verbose,
         ):
             continue
-        isx.trim_movie(**del_keys(parameters, ["comments"]))
+        isx.trim_movie(
+            **parameters_for_isx(
+                parameters,
+                ["comments"],
+                {"input_movie_file": input, "output_movie_file": output},
+            )
+        )
         if verbose:
             print("{} trimming completed".format(output))
         write_log_file(
             parameters,
+            os.path.dirname(output),
             {"function": "trimming"},
             input_files_keys=["input_movie_file"],
             output_file_key="output_movie_file",
@@ -1340,7 +1519,9 @@ def get_efocus(gpio_file: str) -> list:
     return [int(v) for v in video_efocus]
 
 
-def del_keys(d: dict, keys: list) -> dict:
+def parameters_for_isx(
+    d: dict, keys_to_remove: list = [], to_update: dict = {}
+) -> dict:
     """
     Creates a copy of a dictionary while removing references to specific keys
 
@@ -1350,6 +1531,8 @@ def del_keys(d: dict, keys: list) -> dict:
         Distionary to copy without a particular list
     keys : list
         List of keys to be excluded in the returned dictionary
+    to_update : dict
+        key to update from original dictionary
     Returns
     -------
     dict
@@ -1357,7 +1540,8 @@ def del_keys(d: dict, keys: list) -> dict:
 
     """
     copy_dict = d.copy()
-    for key in keys:
+    for key in keys_to_remove:
         if key in d:
             del copy_dict[key]
+    copy_dict.update(to_update)
     return copy_dict
