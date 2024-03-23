@@ -238,9 +238,7 @@ class isx_files_handler:
                     video.flush()
                     del video  # usefull for windows
                     if len(efocus) == 1:
-                        metadata[file]["focus_files"][file] = [
-                            file
-                        ]  ## LLEGO. esto hace qeu si uso deinterleav(overwrite =true) borra info del nas
+                        metadata[file]["focus_files"][file] = [file]
                         metadata[file]["p_rec_paths"].append(file)
                         metadata[file]["p_recording_labels"].append(
                             metadata[file]["recording_labels"][0]
@@ -324,42 +322,57 @@ class isx_files_handler:
             if len(focus) > 1:  # has multiplane
                 existing_files = []
                 for sp_file in planes_fs:
+                    json_file = os.path.basename(sp_file) + "_de_interleave.json"
                     if os.path.exists(sp_file):
                         if overwrite:
                             os.remove(sp_file)
-                            json_file = (
-                                os.path.basename(sp_file) + "_de_interleave.json"
-                            )
                             if os.path.exists(json_file):
-                                os.remove(sp_file)
+                                os.remove(json_file)
                         else:
-                            existing_files.append(sp_file)
-            if len(existing_files) != len(planes_fs):  # has files to run
-                for f in existing_files:  # remove existing planes
-                    os.remove(f)
-                try:
-                    isx.de_interleave(main_file, planes_fs, focus)
+                            if not same_json_or_remove(
+                                parameters={
+                                    "main_file": main_file,
+                                    "planes_fs": planes_fs,
+                                    "sp_file": sp_file,
+                                    "focus": focus,
+                                },
+                                input_files_keys=[main_file],
+                                output=json_file,
+                                verbose=False,
+                            ):
+                                existing_files.append(sp_file)
+                                data["sp_file"] = sp_file
+                                data["output_name"] = os.path.basename(json_file)
+                if len(existing_files) != len(planes_fs):  # has files to run
+                    for f in existing_files:  # remove existing planes
+                        os.remove(f)
+                    try:
+                        isx.de_interleave(main_file, planes_fs, focus)
 
-                    # de_interleave_params = {'input_movie_files':main_file,
-                    #                        'output_movie_files':planes_fs,
-                    #                        'in_efocus_values':focus}
-                    # if same_json_or_remove(parameters, input_files_keys=['input_movie_files'],
-                    #    output=output, verbose=verbose):
-                    #    continue
-                    # isx.de_interleave(**de_interleave_params)
-                    # write_log_file(de_interleave_params,{'function':'de_interleave'},
-                    #    input_files_keys=['input_movie_files'],
-                    #    output_file_key='output_movie_files')
+                        # de_interleave_params = {'input_movie_files':main_file,
+                        #                        'output_movie_files':planes_fs,
+                        #                        'in_efocus_values':focus}
+                        # if same_json_or_remove(parameters, input_files_keys=['input_movie_files'],
+                        #    output=output, verbose=verbose):
+                        #    continue
+                        # isx.de_interleave(**de_interleave_params)
+                        # write_log_file(de_interleave_params,{'function':'de_interleave'},
+                        #    input_files_keys=['input_movie_files'],
+                        #    output_file_key='output_movie_files')
 
-                except Exception as err:
-                    print("Reading: ", main_file)
-                    print("Writting: ", planes_fs)
-                    raise err
+                    except Exception as err:
+                        print("Reading: ", main_file)
+                        print("Writting: ", planes_fs)
+                        raise err
                 if not os.path.exists(
                     json_file
                 ):  # if ovwewrite, it was already removed. If an error cames it does not get here
-                    with open(json_file, "w") as file:
-                        json.dump(data, file)
+                    write_log_file(
+                        params=data,
+                        dir_name=os.path.dirname(sp_file),
+                        input_files_keys=["main_file"],
+                        output_file_key="output_name",
+                    )
 
         print("done")
 
