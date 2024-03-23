@@ -318,31 +318,44 @@ class isx_files_handler:
         """
         print("de_interleaving movies, please wait...")
         for (main_file, planes_fs), focus in zip(self.focus_files.items(), self.efocus):
-            data = {"main_file": main_file, "planes_fs": planes_fs, "focus": focus}
+            data = {
+                "main_file": main_file,
+                "planes_fs": planes_fs,
+                "focus": focus,
+                "output_name": (
+                    os.path.splitext(os.path.basename(main_file))[0]
+                    + "_de_interleave.json"
+                ),
+            }
             if len(focus) > 1:  # has multiplane
                 existing_files = []
                 for sp_file in planes_fs:
-                    json_file = os.path.basename(sp_file) + "_de_interleave.json"
+                    json_file = os.path.join(
+                        os.path.dirname(sp_file),
+                        os.path.splitext(os.path.basename(main_file))[0]
+                        + "_de_interleave.json",
+                    )
                     if os.path.exists(sp_file):
                         if overwrite:
                             os.remove(sp_file)
                             if os.path.exists(json_file):
                                 os.remove(json_file)
                         else:
-                            if not same_json_or_remove(
+                            if same_json_or_remove(
                                 parameters={
                                     "main_file": main_file,
                                     "planes_fs": planes_fs,
-                                    "sp_file": sp_file,
                                     "focus": focus,
+                                    "output_name": (
+                                        os.path.splitext(os.path.basename(main_file))[0]
+                                        + "_de_interleave.json"
+                                    ),
                                 },
-                                input_files_keys=[main_file],
+                                input_files_keys=["main_file"],
                                 output=json_file,
                                 verbose=False,
                             ):
                                 existing_files.append(sp_file)
-                                data["sp_file"] = sp_file
-                                data["output_name"] = os.path.basename(json_file)
                 if len(existing_files) != len(planes_fs):  # has files to run
                     for f in existing_files:  # remove existing planes
                         os.remove(f)
