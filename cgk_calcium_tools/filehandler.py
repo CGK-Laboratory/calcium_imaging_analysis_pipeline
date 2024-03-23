@@ -318,23 +318,10 @@ class isx_files_handler:
         """
         print("de_interleaving movies, please wait...")
         for (main_file, planes_fs), focus in zip(self.focus_files.items(), self.efocus):
-            data = {
-                "main_file": main_file,
-                "planes_fs": planes_fs,
-                "focus": focus,
-                "output_name": (
-                    os.path.splitext(os.path.basename(main_file))[0]
-                    + "_de_interleave.json"
-                ),
-            }
             if len(focus) > 1:  # has multiplane
                 existing_files = []
                 for sp_file in planes_fs:
-                    json_file = os.path.join(
-                        os.path.dirname(sp_file),
-                        os.path.splitext(os.path.basename(main_file))[0]
-                        + "_de_interleave.json",
-                    )
+                    json_file = os.path.splitext(sp_file)[0] + ".json"
                     if os.path.exists(sp_file):
                         if overwrite:
                             os.remove(sp_file)
@@ -348,11 +335,11 @@ class isx_files_handler:
                                     "focus": focus,
                                     "output_name": (
                                         os.path.splitext(os.path.basename(main_file))[0]
-                                        + "_de_interleave.json"
+                                        + ".json"
                                     ),
                                 },
                                 input_files_keys=["main_file"],
-                                output=json_file,
+                                output=sp_file,
                                 verbose=False,
                             ):
                                 existing_files.append(sp_file)
@@ -377,15 +364,19 @@ class isx_files_handler:
                         print("Reading: ", main_file)
                         print("Writting: ", planes_fs)
                         raise err
-                if not os.path.exists(
-                    json_file
-                ):  # if ovwewrite, it was already removed. If an error cames it does not get here
-                    write_log_file(
-                        params=data,
-                        dir_name=os.path.dirname(sp_file),
-                        input_files_keys=["main_file"],
-                        output_file_key="output_name",
-                    )
+                    data = {
+                        "main_file": main_file,
+                        "planes_fs": planes_fs,
+                        "focus": focus,
+                    }
+                    for sp_file in planes_fs:
+                        data["output_name"] = os.path.basename(sp_file)
+                        write_log_file(
+                            params=data,
+                            dir_name=os.path.dirname(sp_file),
+                            input_files_keys=["main_file"],
+                            output_file_key="output_name",
+                        )
 
         print("done")
 
