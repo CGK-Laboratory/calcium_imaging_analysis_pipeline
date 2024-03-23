@@ -333,10 +333,7 @@ class isx_files_handler:
                                     "main_file": main_file,
                                     "planes_fs": planes_fs,
                                     "focus": focus,
-                                    "output_name": (
-                                        os.path.splitext(os.path.basename(main_file))[0]
-                                        + ".json"
-                                    ),
+                                    "output_name": os.path.basename(sp_file),
                                 },
                                 input_files_keys=["main_file"],
                                 output=sp_file,
@@ -349,21 +346,11 @@ class isx_files_handler:
                     try:
                         isx.de_interleave(main_file, planes_fs, focus)
 
-                        # de_interleave_params = {'input_movie_files':main_file,
-                        #                        'output_movie_files':planes_fs,
-                        #                        'in_efocus_values':focus}
-                        # if same_json_or_remove(parameters, input_files_keys=['input_movie_files'],
-                        #    output=output, verbose=verbose):
-                        #    continue
-                        # isx.de_interleave(**de_interleave_params)
-                        # write_log_file(de_interleave_params,{'function':'de_interleave'},
-                        #    input_files_keys=['input_movie_files'],
-                        #    output_file_key='output_movie_files')
-
                     except Exception as err:
                         print("Reading: ", main_file)
                         print("Writting: ", planes_fs)
                         raise err
+
                     data = {
                         "main_file": main_file,
                         "planes_fs": planes_fs,
