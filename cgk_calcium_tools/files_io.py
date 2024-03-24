@@ -171,7 +171,7 @@ def write_log_file(
     input_files_keys : list, optional
         list with the parameters keys, by default ["input_movie_files"]
     output_file_key :  str, optional
-        key to access output file, by default "output_movie_files"
+        key to access output file, by default "output_movie_files". Relative path
     dirname : str
         Combine the dirname with the basename to obtain the absolute path.
     Returns
