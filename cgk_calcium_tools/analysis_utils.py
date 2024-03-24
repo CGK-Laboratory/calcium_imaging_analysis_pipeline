@@ -48,8 +48,8 @@ def get_movies_info(rec_paths)->pd.DataFrame:
             {
                 "Resolution": movie.spacing.num_pixels,
                 "Duration (s)": movie.timing.num_samples * 
-                    movie.timing.period.to_msecs() / 1000,
-                "Sampling Rate (Hz)": 1 / (movie.timing.period.to_msecs() / 1000),
+                    movie.timing.period.to_usecs() / 1000000,
+                "Sampling Rate (Hz)": 1 / (movie.timing.period.to_usecs() / 1000000),
                 "Full Path": Path(file),
                 "Main Name": str(Path(file).name),
                 "Subfolder": str(Path(file).parent.name),
