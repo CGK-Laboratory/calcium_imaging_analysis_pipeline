@@ -10,7 +10,7 @@ from typing import Union, Tuple, Iterable
 from .processing import fix_frames
 import pandas as pd
 import shutil
-from files_io import (
+from .files_io import (
     write_log_file,
     remove_file_and_json,
     same_json_or_remove,
@@ -147,7 +147,6 @@ class isx_files_handler:
                             + "_metadata.json",
                         )
                         if os.path.exists(json_file):
-
                             continue
                     video = isx.Movie.read(file)
                     metadata[file] = copy.deepcopy(meta)
@@ -290,6 +289,7 @@ class isx_files_handler:
             if len(focus) > 1:  # has multiplane
                 existing_files = []
                 for sp_file in planes_fs:
+                    dirname = os.path.dirname(sp_file)
                     json_file = os.path.splitext(sp_file)[0] + ".json"
                     if os.path.exists(sp_file):
                         if overwrite:
@@ -299,12 +299,13 @@ class isx_files_handler:
                         else:
                             if same_json_or_remove(
                                 parameters={
-                                    "main_file": main_file,
-                                    "planes_fs": planes_fs,
-                                    "focus": focus,
-                                    "output_name": os.path.basename(sp_file),
+                                    "input_movie_files": main_file,
+                                    "output_movie_files": [
+                                        os.path.basename(p) for p in planes_fs
+                                    ],
+                                    "in_efocus_values": focus,
                                 },
-                                input_files_keys=["main_file"],
+                                input_files_keys=["input_movie_files"],
                                 output=sp_file,
                                 verbose=False,
                             ):
@@ -320,19 +321,18 @@ class isx_files_handler:
                         print("Writting: ", planes_fs)
                         raise err
 
-                    data = {
-                        "main_file": main_file,
-                        "planes_fs": planes_fs,
-                        "focus": focus,
-                    }
-                    for sp_file in planes_fs:
-                        data["output_name"] = os.path.basename(sp_file)
-                        write_log_file(
-                            params=data,
-                            dir_name=os.path.dirname(sp_file),
-                            input_files_keys=["main_file"],
-                            output_file_key="output_name",
-                        )
+                data = {
+                    "input_movie_files": main_file,
+                    "output_movie_files": [os.path.basename(p) for p in planes_fs],
+                    "in_efocus_values": focus,
+                }
+                # for sp_file in planes_fs:
+                write_log_file(
+                    params=data,
+                    dir_name=dirname,
+                    input_files_keys=["input_movie_files"],
+                    output_file_key="output_movie_files",
+                )
 
         print("done")
 

@@ -165,13 +165,13 @@ def write_log_file(
     Parameters
     ----------
     params : dict
-        Parameter dictionary of executed functions.
+        Parameter dictionary of executed functions. paths should be realtive.
     extra_params : dict, optional
        Parameter dictionary, by default empty.
     input_files_keys : list, optional
         list with the parameters keys, by default ["input_movie_files"]
     output_file_key :  str, optional
-        key to access output file, by default "output_movie_files". Relative path
+        key to access output file, by default "output_movie_files".
     dirname : str
         Combine the dirname with the basename to obtain the absolute path.
     Returns
@@ -183,24 +183,27 @@ def write_log_file(
     data = params.copy()
     data.update(extra_params)
     data["isx_version"] = isx.__version__
+    if not isinstance(data[output_file_key], list):
+        data[output_file_key] = [data[output_file_key]]
 
-    log_path = json_filename(data[output_file_key])
-    actual_date = datetime.utcnow()
-    data["input_modification_date"] = None
-    if not isinstance(input_files_keys, list):
-        input_files_keys = [input_files_keys]
-    temp_date_str = ""
-    for input_file_key in input_files_keys:
-        input_files = data[input_file_key]
-        if not isinstance(input_files, list):
-            input_files = [input_files]
-        for input_file in input_files:
-            input_json = json_filename(input_file)
-            if os.path.exists(os.path.join(dir_name, input_json)):
-                with open(os.path.join(dir_name, input_json)) as file:
-                    input_data = json.load(file)
-                temp_date_str = max(input_data["date"], temp_date_str)
-    data["input_modification_date"] = temp_date_str
-    data["date"] = actual_date.strftime("%Y-%m-%d %H:%M:%S")
-    with open(os.path.join(dir_name, log_path), "w") as file:
-        json.dump(data, file, indent=4)
+    for output in data[output_file_key]:
+        log_path = json_filename(output)
+        actual_date = datetime.utcnow()
+        data["input_modification_date"] = None
+        if not isinstance(input_files_keys, list):
+            input_files_keys = [input_files_keys]
+        temp_date_str = ""
+        for input_file_key in input_files_keys:
+            input_files = data[input_file_key]
+            if not isinstance(input_files, list):
+                input_files = [input_files]
+            for input_file in input_files:
+                input_json = json_filename(input_file)
+                if os.path.exists(os.path.join(dir_name, input_json)):
+                    with open(os.path.join(dir_name, input_json)) as file:
+                        input_data = json.load(file)
+                    temp_date_str = max(input_data["date"], temp_date_str)
+        data["input_modification_date"] = temp_date_str
+        data["date"] = actual_date.strftime("%Y-%m-%d %H:%M:%S")
+        with open(os.path.join(dir_name, log_path), "w") as file:
+            json.dump(data, file, indent=4)
