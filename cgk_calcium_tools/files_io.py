@@ -184,9 +184,10 @@ def write_log_file(
     data.update(extra_params)
     data["isx_version"] = isx.__version__
     if not isinstance(data[output_file_key], list):
-        data[output_file_key] = [data[output_file_key]]
-
-    for output in data[output_file_key]:
+        data_output_file_key = [data[output_file_key]]
+    else:
+        data_output_file_key = data[output_file_key]
+    for output in data_output_file_key:
         log_path = json_filename(output)
         actual_date = datetime.utcnow()
         data["input_modification_date"] = None
