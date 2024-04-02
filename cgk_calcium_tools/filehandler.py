@@ -536,7 +536,8 @@ class isx_files_handler:
         None
 
         """
-        pairlist = self.get_pair_filenames(op)
+        if pairlist is None:
+            pairlist = self.get_pair_filenames(op)
 
         if overwrite:
             for _, output in pairlist:
@@ -1575,7 +1576,7 @@ def parameters_for_isx(
     return copy_dict
 
 
-def make_file(json_file: str):
+def make_file(self, json_file: str):
     try:
         with open(json_file) as file:
             data = json.load(file)
