@@ -486,7 +486,7 @@ class isx_files_handler:
                 )
         return outputs
 
-    def remove_output_files(self, op) -> None:
+    def remove_output_files(self, op, keep_json: bool = True) -> None:
         """
         This function remove output files
 
@@ -494,6 +494,8 @@ class isx_files_handler:
         ----------
         op : str
             Preprocessing operation to run
+        keep_json : bool, optional
+            If True, it does not remove json file associated to output file which will be remove. By default True.
 
         Returns
         -------
@@ -504,9 +506,10 @@ class isx_files_handler:
         for path in paths:
             if os.path.exists(path):
                 os.remove(path)
-            json_file = json_filename(path)
-            if os.path.exists(json_file):
-                os.remove(json_file)
+            if not keep_json:
+                json_file = json_filename(path)
+                if os.path.exists(json_file):
+                    os.remove(json_file)
 
     def run_step(self, op: str, overwrite: bool = False, verbose=False, **kws) -> None:
         """
