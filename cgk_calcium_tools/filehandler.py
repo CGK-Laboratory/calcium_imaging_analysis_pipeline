@@ -289,32 +289,50 @@ class isx_files_handler:
             if len(focus) > 1:  # has multiplane
                 existing_files = []
                 for sp_file in planes_fs:
+                    dirname = os.path.dirname(sp_file)
+                    json_file = os.path.splitext(sp_file)[0] + ".json"
                     if os.path.exists(sp_file):
                         if overwrite:
                             os.remove(sp_file)
+                            if os.path.exists(json_file):
+                                os.remove(json_file)
                         else:
-                            existing_files.append(sp_file)
+                            if same_json_or_remove(
+                                parameters={
+                                    "input_movie_files": main_file,
+                                    "output_movie_files": [
+                                        os.path.basename(p) for p in planes_fs
+                                    ],
+                                    "in_efocus_values": focus,
+                                },
+                                input_files_keys=["input_movie_files"],
+                                output=sp_file,
+                                verbose=False,
+                            ):
+                                existing_files.append(sp_file)
                 if len(existing_files) != len(planes_fs):  # has files to run
                     for f in existing_files:  # remove existing planes
                         os.remove(f)
                     try:
                         isx.de_interleave(main_file, planes_fs, focus)
 
-                        # de_interleave_params = {'input_movie_files':main_file,
-                        #                        'output_movie_files':planes_fs,
-                        #                        'in_efocus_values':focus}
-                        # if same_json_or_remove(parameters, input_files_keys=['input_movie_files'],
-                        #    output=output, verbose=verbose):
-                        #    continue
-                        # isx.de_interleave(**de_interleave_params)
-                        # write_log_file(de_interleave_params,{'function':'de_interleave'},
-                        #    input_files_keys=['input_movie_files'],
-                        #    output_file_key='output_movie_files')
-
                     except Exception as err:
                         print("Reading: ", main_file)
                         print("Writting: ", planes_fs)
                         raise err
+
+                data = {
+                    "input_movie_files": main_file,
+                    "output_movie_files": [os.path.basename(p) for p in planes_fs],
+                    "in_efocus_values": focus,
+                }
+                # for sp_file in planes_fs:
+                write_log_file(
+                    params=data,
+                    dir_name=dirname,
+                    input_files_keys=["input_movie_files"],
+                    output_file_key="output_movie_files",
+                )
 
         print("done")
 
