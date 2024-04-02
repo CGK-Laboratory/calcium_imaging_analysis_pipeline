@@ -165,7 +165,7 @@ def write_log_file(
     Parameters
     ----------
     params : dict
-        Parameter dictionary of executed functions. paths should be realtive.
+        Parameter dictionary of executed functions. Paths should be relative.
     extra_params : dict, optional
        Parameter dictionary, by default empty.
     input_files_keys : list, optional
