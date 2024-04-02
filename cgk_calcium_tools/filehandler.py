@@ -511,7 +511,14 @@ class isx_files_handler:
                 if os.path.exists(json_file):
                     os.remove(json_file)
 
-    def run_step(self, op: str, overwrite: bool = False, verbose=False, **kws) -> None:
+    def run_step(
+        self,
+        op: str,
+        overwrite: bool = False,
+        verbose=False,
+        pairlist: Union[Tuple[list, list], None] = None,
+        **kws,
+    ) -> None:
         """
         This function executes the specified preprocessing operation.
 
@@ -1566,3 +1573,39 @@ def parameters_for_isx(
             del copy_dict[key]
     copy_dict.update(to_update)
     return copy_dict
+
+
+def make_file(json_file: str):
+    try:
+        with open(json_file) as file:
+            data = json.load(file)
+            input = data["input_movie_files"]
+            if not os.path.exists(input):
+                file = os.path.basename(input)[0] + ".json"
+                make_file(file)
+
+            function = data["function"]
+            pairlist = [data["input_movie_files"], data["output_movie_files"]]
+            del data["function"]
+            del data["input_movie_files"]
+            del data["output_movie_files"]
+            del data["isx_version"]
+            del data["input_modification_date"]
+            del data["date"]
+
+            self.run_step(
+                op=function, overwrite=False, verbose=False, pairlist=pairlist, **data
+            )
+
+    except AssertionError as e:
+        print("Error:", e)
+
+
+def re_do_from_raw(self, op: str) -> list:
+    outputs = self.get_filenames(op=op)
+    for output in outputs:
+        if not os.path.exists(output):
+            json_file = os.path.basename(output)[0] + ".json"
+            make_file(json_file)
+
+    return outputs
