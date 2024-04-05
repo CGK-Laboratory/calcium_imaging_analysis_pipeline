@@ -7,10 +7,10 @@ import numpy as np
 import isx
 import json
 from typing import Union, Tuple, Iterable
-from .processing import fix_frames
+from processing import fix_frames
 import pandas as pd
 import shutil
-from .files_io import (
+from files_io import (
     write_log_file,
     remove_file_and_json,
     same_json_or_remove,
@@ -105,7 +105,6 @@ class isx_files_handler:
             if len(v) != len_list:
                 # this will extend the single inputs
                 lists_inputs[k] = v * len_list
-
         meta = {
             "outputsfolders": [],
             "recording_labels": [],
@@ -1172,6 +1171,51 @@ class isx_files_handler:
 
         return pd.concat(df)
 
+    def make_file(self, json_file: str):
+        try:
+            with open(json_file) as file:
+                data = json.load(file)
+                input = os.path.join(
+                    os.path.dirname(json_file), data["input_movie_files"]
+                )
+            if not os.path.exists(input):
+                file = os.path.join(
+                    os.path.dirname(json_file), os.path.splitext(input)[0] + ".json"
+                )
+                self.make_file(file)
+
+            function = data["function"]
+            pairlist = zip(
+                [os.path.join(os.path.dirname(json_file), data["input_movie_files"])],
+                [os.path.join(os.path.dirname(json_file), data["output_movie_files"])],
+            )
+            del data["function"]
+            del data["input_movie_files"]
+            del data["output_movie_files"]
+            del data["isx_version"]
+            del data["input_modification_date"]
+            del data["date"]
+
+            self.run_step(
+                op=function,
+                overwrite=False,
+                verbose=False,
+                pairlist=pairlist,
+                **data,
+            )
+
+        except AssertionError as e:
+            print("Error:", e)
+
+    def re_do_from_raw(self, op: str) -> list:
+        outputs = self.get_filenames(op=op)
+        for output in outputs:
+            if not os.path.exists(output):
+                json_file = os.path.splitext(output)[0] + ".json"
+                self.make_file(json_file)
+
+        return outputs
+
 
 def get_segment_from_movie(
     inputfile: str,
@@ -1343,7 +1387,7 @@ def preprocess_step(
     pairlist: Tuple[list, list], parameters: dict, verbose: bool = False
 ) -> None:
     """
-    After performing checks, use the isx.preprocess function, which which preprocesses movies,
+    After performing checks, use the isx.preprocess function, which preprocesses movies,
     optionally applying spatial and temporal downsampling and cropping.
 
     Parameters
@@ -1382,6 +1426,7 @@ def preprocess_step(
                 "output_movie_files": os.path.basename(output),
             }
         )
+
         if same_json_or_remove(
             parameters,
             input_files_keys=["input_movie_files"],
@@ -1389,6 +1434,7 @@ def preprocess_step(
             verbose=verbose,
         ):
             continue
+
         isx.preprocess(
             **parameters_for_isx(
                 parameters,
@@ -1396,6 +1442,7 @@ def preprocess_step(
                 {"input_movie_files": input, "output_movie_files": output},
             )
         )
+
         nfixed = fix_frames(output, std_th=parameters["fix_frames_th_std"], report=True)
 
         write_log_file(
@@ -1576,37 +1623,11 @@ def parameters_for_isx(
     return copy_dict
 
 
-def make_file(self, json_file: str):
-    try:
-        with open(json_file) as file:
-            data = json.load(file)
-            input = data["input_movie_files"]
-            if not os.path.exists(input):
-                file = os.path.basename(input)[0] + ".json"
-                make_file(file)
+# def re_do_from_raw(self, op: str) -> list:
+#     outputs = self.get_filenames(op=op)
+#     for output in outputs:
+#         if not os.path.exists(output):
+#             json_file = os.path.basename(output)[0] + ".json"
+#             make_file(json_file)
 
-            function = data["function"]
-            pairlist = [data["input_movie_files"], data["output_movie_files"]]
-            del data["function"]
-            del data["input_movie_files"]
-            del data["output_movie_files"]
-            del data["isx_version"]
-            del data["input_modification_date"]
-            del data["date"]
-
-            self.run_step(
-                op=function, overwrite=False, verbose=False, pairlist=pairlist, **data
-            )
-
-    except AssertionError as e:
-        print("Error:", e)
-
-
-def re_do_from_raw(self, op: str) -> list:
-    outputs = self.get_filenames(op=op)
-    for output in outputs:
-        if not os.path.exists(output):
-            json_file = os.path.basename(output)[0] + ".json"
-            make_file(json_file)
-
-    return outputs
+#     return outputs
