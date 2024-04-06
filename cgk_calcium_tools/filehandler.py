@@ -586,10 +586,6 @@ class isx_files_handler:
 
         if op.startswith("MC"):
             print("Applying motion correction. Please wait...")
-
-            # translation_files = self.get_results_filenames("translations.csv", op=op)
-            # crop_rect_files = self.get_results_filenames("crop_rect.csv", op=op)
-
             motion_correct_step(
                 translation_files, crop_rect_files, parameters, pairlist, verbose
             )
@@ -1577,7 +1573,7 @@ def trim_movie(
         endframe = user_parameters["video_len"] * sr
         maxfileframe = movie.timing.num_samples + 1
         assert maxfileframe >= endframe, "max time > duration of the video"
-        parameters["crop_segments"] = [[endframe, maxfileframe]]
+        parameters["video_len"] = user_parameters["video_len"]
         if same_json_or_remove(
             parameters,
             input_files_keys=["input_movie_file"],
@@ -1585,15 +1581,17 @@ def trim_movie(
             verbose=verbose,
         ):
             continue
+        parameters["crop_segments"] = [[endframe, maxfileframe]]
         isx.trim_movie(
             **parameters_for_isx(
                 parameters,
-                ["comments"],
+                ["comments", "video_len"],
                 {"input_movie_file": input, "output_movie_file": output},
             )
         )
         if verbose:
             print("{} trimming completed".format(output))
+        del parameters["crop_segments"]
         write_log_file(
             parameters,
             os.path.dirname(output),
@@ -1655,13 +1653,3 @@ def parameters_for_isx(
             del copy_dict[key]
     copy_dict.update(to_update)
     return copy_dict
-
-
-# def re_do_from_raw(self, op: str) -> list:
-#     outputs = self.get_filenames(op=op)
-#     for output in outputs:
-#         if not os.path.exists(output):
-#             json_file = os.path.basename(output)[0] + ".json"
-#             make_file(json_file)
-
-#     return outputs
