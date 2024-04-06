@@ -106,6 +106,7 @@ class isx_files_handler:
                 # this will extend the single inputs
                 lists_inputs[k] = v * len_list
         meta = {
+            "main_data_folder": main_data_folder,
             "outputsfolders": [],
             "recording_labels": [],
             "rec_paths": [],
@@ -535,8 +536,19 @@ class isx_files_handler:
         None
 
         """
+
+        if pairlist is not None and op == "MC":
+            translation_files = [
+                os.path.splitext(pairlist[0][1])[0] + "-translations.csv"
+            ]
+            crop_rect_files = [os.path.splitext(pairlist[0][1])[0] + "-crop_rect.csv"]
         if pairlist is None:
             pairlist = self.get_pair_filenames(op)
+            if op == "MC":
+                translation_files = self.get_results_filenames(
+                    "translations.csv", op=op
+                )
+                crop_rect_files = self.get_results_filenames("crop_rect.csv", op=op)
 
         if overwrite:
             for _, output in pairlist:
@@ -575,8 +587,8 @@ class isx_files_handler:
         if op.startswith("MC"):
             print("Applying motion correction. Please wait...")
 
-            translation_files = self.get_results_filenames("translations.csv", op=op)
-            crop_rect_files = self.get_results_filenames("crop_rect.csv", op=op)
+            # translation_files = self.get_results_filenames("translations.csv", op=op)
+            # crop_rect_files = self.get_results_filenames("crop_rect.csv", op=op)
 
             motion_correct_step(
                 translation_files, crop_rect_files, parameters, pairlist, verbose
@@ -1171,50 +1183,73 @@ class isx_files_handler:
 
         return pd.concat(df)
 
-    def make_file(self, json_file: str):
-        try:
-            with open(json_file) as file:
-                data = json.load(file)
-                input = os.path.join(
-                    os.path.dirname(json_file), data["input_movie_files"]
-                )
-            if not os.path.exists(input):
-                file = os.path.join(
+    def _re_compute_from_log(self, json_file: str) -> bool:
+        if not os.path.exists(json_file):
+            assert os.path.exists(
+                os.path.splitext(json_file)[0] + "_metadata.json"
+            ), "Error: No json file found"
+        with open(json_file) as file:
+            data = json.load(file)
+        if "input_movie_file" in data:
+            input = os.path.join(os.path.dirname(json_file), data["input_movie_file"])
+        else:
+            input = os.path.join(os.path.dirname(json_file), data["input_movie_files"])
+
+        if not os.path.exists(input):
+            self._re_compute_from_log(
+                os.path.join(
                     os.path.dirname(json_file), os.path.splitext(input)[0] + ".json"
                 )
-                self.make_file(file)
-
-            function = data["function"]
-            pairlist = zip(
-                [os.path.join(os.path.dirname(json_file), data["input_movie_files"])],
-                [os.path.join(os.path.dirname(json_file), data["output_movie_files"])],
             )
-            del data["function"]
+        steps_list = {
+            "preprocess": "PP",
+            "spatial_filter": "BP",
+            "motion_correct": "MC",
+            "trimming": "TR",
+        }
+        if data["function"] in steps_list:
+            function = steps_list[data["function"]]
+        else:
+            function = data["function"]
+        if "input_movie_file" in data:
+            pairlist = [
+                [
+                    os.path.join(os.path.dirname(json_file), data["input_movie_file"]),
+                    os.path.join(os.path.dirname(json_file), data["output_movie_file"]),
+                ],
+            ]
+            del data["input_movie_file"]
+            del data["output_movie_file"]
+        else:
+            pairlist = [
+                [
+                    os.path.join(os.path.dirname(json_file), data["input_movie_files"]),
+                    os.path.join(
+                        os.path.dirname(json_file), data["output_movie_files"]
+                    ),
+                ],
+            ]
             del data["input_movie_files"]
             del data["output_movie_files"]
-            del data["isx_version"]
-            del data["input_modification_date"]
-            del data["date"]
+        del data["function"]
+        del data["isx_version"]
+        del data["input_modification_date"]
+        del data["date"]
+        self.run_step(
+            op=function,
+            overwrite=False,
+            verbose=False,
+            pairlist=pairlist,
+            **data,
+        )
 
-            self.run_step(
-                op=function,
-                overwrite=False,
-                verbose=False,
-                pairlist=pairlist,
-                **data,
-            )
-
-        except AssertionError as e:
-            print("Error:", e)
-
-    def re_do_from_raw(self, op: str) -> list:
+    def re_compute_from_log(self, op: str) -> list:
         outputs = self.get_filenames(op=op)
         for output in outputs:
             if not os.path.exists(output):
                 json_file = os.path.splitext(output)[0] + ".json"
-                self.make_file(json_file)
-
-        return outputs
+                self._re_compute_from_log(json_file)
+        print("done")
 
 
 def get_segment_from_movie(
@@ -1359,7 +1394,6 @@ def motion_correct_step(
             verbose=verbose,
         ):
             continue
-
         isx.motion_correct(
             **parameters_for_isx(
                 parameters,
