@@ -977,44 +977,82 @@ class isx_files_handler:
                 verbose=verbose,
                 input_files_keys=["input_cell_set_files", "auto_accept_reject"],
             ):
-                try:
-                    isx.multiplane_registration(
-                        **parameters_for_isx(
-                            mpr_parameters,
-                            ["comments", "auto_accept_reject"],
-                            {
-                                "input_cell_set_files": input_cell_set_files,
-                                "output_cell_set_file": output_cell_set_file,
-                                "auto_accept_reject": ar_cell_set_file,
-                            },
+                input = []
+                for i in input_cell_set_files:
+                    n_input = input_cell_set_files.num_cells
+                    accepted = 0
+                    if mpr_parameters["accepted_cells_only"] is True:
+                        for n in n_input:
+                            if input_cell_set_files.get_cell_status(n) == "accepted":
+                                accepted += 1
+                    else:
+                        accepted = n_input
+                    if accepted != 0:
+                        input.append(i)
+                    else:
+                        input_cell_set_files.remove(i)
+                    if input.len() != input_cell_set_files.len():
+                        if input.len() == 0:
+                            print(
+                                f"Warning: File: {output_cell_set_file} not generated.\n"
+                                + "Empty cellmap created in its place"
+                            )
+                            cell_set_plane = isx.CellSet.read(input_cell_set_files[0])
+                            cell_set = isx.CellSet.write(
+                                output_cell_set_file,
+                                cell_set_plane.timing,
+                                cell_set_plane.spacing,
+                            )
+                            image_null = np.zeros(
+                                cell_set.spacing.num_pixels, dtype=np.float32
+                            )
+                            trace_null = np.zeros(
+                                cell_set.timing.num_samples, dtype=np.float32
+                            )
+                            cell_set.set_cell_data(0, image_null, trace_null, "")
+                            cell_set.flush()
+                            del cell_set
+                            del cell_set_plane
+                        elif input.len() == 1:
+                            input_cell_set_files.append(i.copy())
+                    else:
+                        isx.multiplane_registration(
+                            **parameters_for_isx(
+                                mpr_parameters,
+                                ["comments", "auto_accept_reject"],
+                                {
+                                    "input_cell_set_files": input_cell_set_files,
+                                    "output_cell_set_file": output_cell_set_file,
+                                    "auto_accept_reject": ar_cell_set_file,
+                                },
+                            )
                         )
-                    )
 
-                except Exception as e:
-                    # Code to handle the exception
-                    print(f"Exception: {e}")
+                # except Exception as e:
+                #     # Code to handle the exception
+                #     print(f"Exception: {e}")
 
-                    if not os.path.exists(output_cell_set_file):
-                        print(
-                            f"Warning: File: {output_cell_set_file} not generated.\n"
-                            + "Empty cellmap created in its place"
-                        )
-                        cell_set_plane = isx.CellSet.read(input_cell_set_files[0])
-                        cell_set = isx.CellSet.write(
-                            output_cell_set_file,
-                            cell_set_plane.timing,
-                            cell_set_plane.spacing,
-                        )
-                        image_null = np.zeros(
-                            cell_set.spacing.num_pixels, dtype=np.float32
-                        )
-                        trace_null = np.zeros(
-                            cell_set.timing.num_samples, dtype=np.float32
-                        )
-                        cell_set.set_cell_data(0, image_null, trace_null, "")
-                        cell_set.flush()
-                        del cell_set
-                        del cell_set_plane
+                # if not os.path.exists(output_cell_set_file):
+                # print(
+                #     f"Warning: File: {output_cell_set_file} not generated.\n"
+                #     + "Empty cellmap created in its place"
+                # )
+                # cell_set_plane = isx.CellSet.read(input_cell_set_files[0])
+                # cell_set = isx.CellSet.write(
+                #     output_cell_set_file,
+                #     cell_set_plane.timing,
+                #     cell_set_plane.spacing,
+                # )
+                # image_null = np.zeros(
+                #     cell_set.spacing.num_pixels, dtype=np.float32
+                # )
+                # trace_null = np.zeros(
+                #     cell_set.timing.num_samples, dtype=np.float32
+                # )
+                # cell_set.set_cell_data(0, image_null, trace_null, "")
+                # cell_set.flush()
+                # del cell_set
+                # del cell_set_plane
 
                 write_log_file(
                     mpr_parameters,
