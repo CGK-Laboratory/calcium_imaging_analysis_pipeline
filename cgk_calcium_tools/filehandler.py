@@ -979,10 +979,13 @@ class isx_files_handler:
             ):
                 input = []
                 for i in input_cell_set_files:
-                    n_input = input_cell_set_files.num_cells
+                    n_input = (isx.CellSet.read(i)).num_cells
                     accepted = 0
-                    if mpr_parameters["accepted_cells_only"] is True:
-                        for n in n_input:
+                    if (
+                        "accepted_cells_only" in mpr_parameters
+                        and mpr_parameters["accepted_cells_only"] is True
+                    ):
+                        for n in range(n_input):
                             if input_cell_set_files.get_cell_status(n) == "accepted":
                                 accepted += 1
                     else:
@@ -990,7 +993,7 @@ class isx_files_handler:
                     if accepted != 0:
                         input.append(i)
 
-                if input.len() == 0:
+                if len(input) == 0:
                     print(
                         f"Warning: File: {output_cell_set_file} not generated.\n"
                         + "Empty cellmap created in its place"
@@ -1007,7 +1010,7 @@ class isx_files_handler:
                     cell_set.flush()
                     del cell_set
                     del cell_set_plane
-                elif input.len() == 1:
+                elif len(input) == 1:
                     output_cell_set_file = input[0].copy()
                 else:
                     isx.multiplane_registration(
