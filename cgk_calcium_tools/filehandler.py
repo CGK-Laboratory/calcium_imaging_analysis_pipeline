@@ -7,10 +7,10 @@ import numpy as np
 import isx
 import json
 from typing import Union, Tuple, Iterable
-from processing import fix_frames
+from .processing import fix_frames
 import pandas as pd
 import shutil
-from files_io import (
+from .files_io import (
     write_log_file,
     remove_file_and_json,
     same_json_or_remove,
