@@ -55,7 +55,7 @@ class isx_files_handler:
     parameters_path: str, optional
         Path with the information of the default parameter. If it does not exist, an error occurs.
         By default "default_parameter.json" in the same folder as this file.
-     overwrite_metadata: bool, optional
+    overwrite_metadata: bool, optional
         If True overwrite metadata json file. By default False.
     """
 
@@ -163,7 +163,9 @@ class isx_files_handler:
                     if recording_labels is None:
                         metadata[file]["recording_labels"] = metadata[file]["rec_paths"]
                     else:
-                        assert not one_file_per_folder, "Multiple files found with {}. Recording labels not supported.".format(
+                        assert (
+                            one_file_per_folder
+                        ), "Multiple files found with {}. Recording labels not supported.".format(
                             str(Path(mainf) / subfolder / fpatter)
                         )
                         metadata[file]["recording_labels"] = next(recording_labels_iter)
@@ -537,11 +539,6 @@ class isx_files_handler:
 
         """
 
-        if pairlist is not None and op == "MC":
-            translation_files = [
-                os.path.splitext(pairlist[0][1])[0] + "-translations.csv"
-            ]
-            crop_rect_files = [os.path.splitext(pairlist[0][1])[0] + "-crop_rect.csv"]
         if pairlist is None:
             pairlist = self.get_pair_filenames(op)
             if op == "MC":
@@ -549,6 +546,13 @@ class isx_files_handler:
                     "translations.csv", op=op
                 )
                 crop_rect_files = self.get_results_filenames("crop_rect.csv", op=op)
+        elif op == "MC":
+            translation_files = [
+                os.path.splitext(p[1])[0] + "-translations.csv" for p in pairlist
+            ]
+            crop_rect_files = [
+                os.path.splitext(p[1])[0] + "-crop_rect.csv" for p in pairlist
+            ]
 
         if overwrite:
             for _, output in pairlist:
@@ -573,7 +577,9 @@ class isx_files_handler:
         if self.processing_steps.index(op) == 0:  # if first step
             # check if all exist
             for finput, _ in self.get_pair_filenames(op):
-                assert os.path.exists(finput), f"""File {finput} not exist:
+                assert os.path.exists(
+                    finput
+                ), f"""File {finput} not exist:
                     Run .de_interleave() to De-interleave multiplane movies"""
 
         if op.startswith("PP"):
@@ -977,44 +983,55 @@ class isx_files_handler:
                 verbose=verbose,
                 input_files_keys=["input_cell_set_files", "auto_accept_reject"],
             ):
-                try:
+                input = []
+                for i in input_cell_set_files:
+                    cs = isx.CellSet.read(i)
+                    n_input = cs.num_cells
+                    accepted = 0
+                    if (
+                        "accepted_cells_only" in mpr_parameters
+                        and mpr_parameters["accepted_cells_only"] is True
+                    ):
+                        for n in range(n_input):
+                            if cs.get_cell_status(n) == "accepted":
+                                accepted += 1
+                    else:
+                        accepted = n_input
+                    if accepted != 0:
+                        input.append(i)
+                    cs.flush()
+                    del cs  # isx keeps the file open otherwise
+                if len(input) == 0:
+                    print(
+                        f"Warning: File: {output_cell_set_file} not generated.\n"
+                        + "Empty cellmap created in its place"
+                    )
+                    cell_set_plane = isx.CellSet.read(input_cell_set_files[0])
+                    cell_set = isx.CellSet.write(
+                        output_cell_set_file,
+                        cell_set_plane.timing,
+                        cell_set_plane.spacing,
+                    )
+                    image_null = np.zeros(cell_set.spacing.num_pixels, dtype=np.float32)
+                    trace_null = np.zeros(cell_set.timing.num_samples, dtype=np.float32)
+                    cell_set.set_cell_data(0, image_null, trace_null, "")
+                    cell_set.flush()
+                    del cell_set
+                    del cell_set_plane  # isx keeps the file open otherwise
+                elif len(input) == 1:
+                    shutil.copyfile(input[0], output_cell_set_file)
+                else:
                     isx.multiplane_registration(
                         **parameters_for_isx(
                             mpr_parameters,
                             ["comments", "auto_accept_reject"],
                             {
-                                "input_cell_set_files": input_cell_set_files,
+                                "input_cell_set_files": input,
                                 "output_cell_set_file": output_cell_set_file,
                                 "auto_accept_reject": ar_cell_set_file,
                             },
                         )
                     )
-
-                except Exception as e:
-                    # Code to handle the exception
-                    print(f"Exception: {e}")
-
-                    if not os.path.exists(output_cell_set_file):
-                        print(
-                            f"Warning: File: {output_cell_set_file} not generated.\n"
-                            + "Empty cellmap created in its place"
-                        )
-                        cell_set_plane = isx.CellSet.read(input_cell_set_files[0])
-                        cell_set = isx.CellSet.write(
-                            output_cell_set_file,
-                            cell_set_plane.timing,
-                            cell_set_plane.spacing,
-                        )
-                        image_null = np.zeros(
-                            cell_set.spacing.num_pixels, dtype=np.float32
-                        )
-                        trace_null = np.zeros(
-                            cell_set.timing.num_samples, dtype=np.float32
-                        )
-                        cell_set.set_cell_data(0, image_null, trace_null, "")
-                        cell_set.flush()
-                        del cell_set
-                        del cell_set_plane
 
                 write_log_file(
                     mpr_parameters,
@@ -1180,20 +1197,24 @@ class isx_files_handler:
         return pd.concat(df)
 
     def _recompute_from_log(self, json_file: str) -> None:
-       
         if not os.path.exists(json_file):
             assert os.path.exists(
-                os.path.splitext(json_file)[0] + "_metadata.json"
-            ), "Error: No json file found"
+                os.path.splitext(json_file)
+            ), "Error: json file not found"
         with open(json_file) as file:
             data = json.load(file)
         if "input_movie_file" in data:
-            input = os.path.join(os.path.dirname(json_file), data["input_movie_file"])
-        else:
-            input = os.path.join(os.path.dirname(json_file), data["input_movie_files"])
+            input_key = "input_movie_file"
+            output_key = "output_movie_file"
+        else:  # different functions have different arguments
+            input_key = "input_movie_files"
+            output_key = "output_movie_files"
+
+        input = os.path.join(os.path.dirname(json_file), data[input_key])
 
         if not os.path.exists(input):
-            self._recompute_from_log(
+            self._re_compute_from_log(
+
                 os.path.join(
                     os.path.dirname(json_file), os.path.splitext(input)[0] + ".json"
                 )
@@ -1208,26 +1229,16 @@ class isx_files_handler:
             function = steps_list[data["function"]]
         else:
             function = data["function"]
-        if "input_movie_file" in data:
-            pairlist = [
-                [
-                    os.path.join(os.path.dirname(json_file), data["input_movie_file"]),
-                    os.path.join(os.path.dirname(json_file), data["output_movie_file"]),
-                ],
-            ]
-            del data["input_movie_file"]
-            del data["output_movie_file"]
-        else:
-            pairlist = [
-                [
-                    os.path.join(os.path.dirname(json_file), data["input_movie_files"]),
-                    os.path.join(
-                        os.path.dirname(json_file), data["output_movie_files"]
-                    ),
-                ],
-            ]
-            del data["input_movie_files"]
-            del data["output_movie_files"]
+
+        pairlist = [
+            [
+                os.path.join(os.path.dirname(json_file), data[input_key]),
+                os.path.join(os.path.dirname(json_file), data[output_key]),
+            ],
+        ]
+        del data[input_key]
+        del data[output_key]
+
         del data["function"]
         del data["isx_version"]
         del data["input_modification_date"]
@@ -1247,6 +1258,7 @@ class isx_files_handler:
         Parameters
         ----------
         op : str
+
             operation
             
         """
@@ -1255,6 +1267,7 @@ class isx_files_handler:
         for output in outputs:
             if not os.path.exists(output):
                 json_file = os.path.splitext(output)[0] + ".json"
+
                 self._recompute_from_log(json_file)
         print("done")
 
