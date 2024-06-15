@@ -1196,7 +1196,7 @@ class isx_files_handler:
 
         return pd.concat(df)
 
-    def _re_compute_from_log(self, json_file: str) -> bool:
+    def _recompute_from_log(self, json_file: str) -> None:
         if not os.path.exists(json_file):
             assert os.path.exists(
                 os.path.splitext(json_file)
@@ -1214,6 +1214,7 @@ class isx_files_handler:
 
         if not os.path.exists(input):
             self._re_compute_from_log(
+
                 os.path.join(
                     os.path.dirname(json_file), os.path.splitext(input)[0] + ".json"
                 )
@@ -1250,20 +1251,24 @@ class isx_files_handler:
             **data,
         )
 
-    def re_compute_from_log(self, op: str) -> None:
-        """This function get a preprocessing operation and recompute
-        the previous results using the logs.
+    def recompute_from_log(self, op: str) -> None:
+        """Recompute operation from logs (json files) inside the folders.
+        If the output file already exists, it will be skipped.
 
         Parameters
         ----------
         op : str
-            The videos will be recomputed up to this preprocesing operation
+
+            operation
+            
         """
+     
         outputs = self.get_filenames(op=op)
         for output in outputs:
             if not os.path.exists(output):
                 json_file = os.path.splitext(output)[0] + ".json"
-                self._re_compute_from_log(json_file)
+
+                self._recompute_from_log(json_file)
         print("done")
 
 
