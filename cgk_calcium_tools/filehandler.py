@@ -23,7 +23,6 @@ def ifstr2list(x) -> list:
         return x
     return [x]
 
-
 class isx_files_handler:
     """
     This class helps to iterate over files for inscopix processing
@@ -136,6 +135,7 @@ class isx_files_handler:
                 if one_file_per_folder:
                     assert len(files) == 1, "Multiple files found for {}.".format(
                         str(Path(mainf) / subfolder / fpatter)
+                        # Include a better msg that explain what this error is and how to fix it. 
                     )
                 else:
                     files = [r for r in files if r not in meta["rec_paths"]]
