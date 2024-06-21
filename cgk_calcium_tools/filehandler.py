@@ -119,9 +119,7 @@ class isx_files_handler:
             "duration": [],
             "frames_per_second": [],
         }
-        loaded_meta_files = (
-            []
-        )  # this variable is used to don't load multiple times the same json
+        loaded_meta_files = [] #this variable is used to don't load multiple times the same json
         for mainf, subfolder, fpatter, outf in zip(
             lists_inputs["main_data_folder"],
             lists_inputs["data_subfolders"],
