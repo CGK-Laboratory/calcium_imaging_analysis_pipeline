@@ -23,7 +23,6 @@ def ifstr2list(x) -> list:
         return x
     return [x]
 
-
 class isx_files_handler:
     """
     This class helps to iterate over files for inscopix processing
@@ -44,7 +43,7 @@ class isx_files_handler:
         copied and the results written. By default "."
     processing_steps: list, optional
         Naming steps will be use, adding one affter the previous ones. By default "["PP", "TR", "BP", "MC"]"
-    one_file_per_folder: bool, optional
+    single_file_match: bool, optional
         If True it will check then one and only one file is found with the pattern in
         its folder. By default "True"
     recording_labels: list, optional
@@ -66,7 +65,7 @@ class isx_files_handler:
         data_subfolders: Union[str, list] = ".",
         files_patterns: Union[str, list] = ".isx",
         processing_steps: list = ["PP", "TR", "BP", "MC"],
-        one_file_per_folder: bool = True,
+        single_file_match: bool = True,
         recording_labels: Union[list, None] = None,
         check_new_imputs: bool = True,
         parameters_path: str = os.path.join(
@@ -119,6 +118,7 @@ class isx_files_handler:
             "duration": [],
             "frames_per_second": [],
         }
+        loaded_meta_files = [] #this variable is used to don't load multiple times the same json
         for mainf, subfolder, fpatter, outf in zip(
             lists_inputs["main_data_folder"],
             lists_inputs["data_subfolders"],
@@ -133,9 +133,10 @@ class isx_files_handler:
                 )
                 metadata = {}
 
-                if one_file_per_folder:
+                if single_file_match:
                     assert len(files) == 1, "Multiple files found for {}.".format(
                         str(Path(mainf) / subfolder / fpatter)
+                        # Include a better msg that explain what this error is and how to fix it. 
                     )
                 else:
                     files = [r for r in files if r not in meta["rec_paths"]]
@@ -164,7 +165,7 @@ class isx_files_handler:
                         metadata[file]["recording_labels"] = metadata[file]["rec_paths"]
                     else:
                         assert (
-                            one_file_per_folder
+                            single_file_match
                         ), "Multiple files found with {}. Recording labels not supported.".format(
                             str(Path(mainf) / subfolder / fpatter)
                         )
@@ -256,10 +257,15 @@ class isx_files_handler:
                         json.dump(intern_data, j_file)
             else:
                 assert not overwrite_metadata, "Overwriting json file not possible"
-            fpatter = "*_metadata.json"
             base_folder = os.path.join(outf, subfolder)
-            files = glob(os.path.join(base_folder, fpatter))
+            files = glob(
+                os.path.join(
+                    base_folder, os.path.splitext(fpatter)[0] + "_metadata.json"
+                )
+            )
             for f in files:
+                if f in loaded_meta_files:
+                    continue
                 with open(f, "r") as file_data:
                     json_data = json.load(file_data)
                     for key_j, value_j in json_data.items():
@@ -269,6 +275,7 @@ class isx_files_handler:
                             meta[key_j].append(value_j)
                         else:
                             meta[key_j].extend(value_j)
+                loaded_meta_files.append(f)
         self.__dict__.update(meta)
 
     def de_interleave(self, overwrite: bool = False) -> None:
@@ -1214,7 +1221,6 @@ class isx_files_handler:
 
         if not os.path.exists(input):
             self._re_compute_from_log(
-
                 os.path.join(
                     os.path.dirname(json_file), os.path.splitext(input)[0] + ".json"
                 )
@@ -1260,9 +1266,9 @@ class isx_files_handler:
         op : str
 
             operation
-            
+
         """
-     
+
         outputs = self.get_filenames(op=op)
         for output in outputs:
             if not os.path.exists(output):
