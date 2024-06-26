@@ -23,6 +23,7 @@ def ifstr2list(x) -> list:
         return x
     return [x]
 
+
 class isx_files_handler:
     """
     This class helps to iterate over files for inscopix processing
@@ -118,7 +119,9 @@ class isx_files_handler:
             "duration": [],
             "frames_per_second": [],
         }
-        loaded_meta_files = [] #this variable is used to don't load multiple times the same json
+        loaded_meta_files = (
+            []
+        )  # this variable is used to don't load multiple times the same json
         for mainf, subfolder, fpatter, outf in zip(
             lists_inputs["main_data_folder"],
             lists_inputs["data_subfolders"],
@@ -136,7 +139,7 @@ class isx_files_handler:
                 if single_file_match:
                     assert len(files) == 1, "Multiple files found for {}.".format(
                         str(Path(mainf) / subfolder / fpatter)
-                        # Include a better msg that explain what this error is and how to fix it. 
+                        # Include a better msg that explain what this error is and how to fix it.
                     )
                 else:
                     files = [r for r in files if r not in meta["rec_paths"]]
@@ -745,12 +748,11 @@ class isx_files_handler:
         cells_extr_params: Union[dict, None] = None,
         detection_params: Union[dict, None] = None,
         accept_reject_params: Union[dict, None] = None,
-        multiplane_params: Union[dict, None] = None,
         cellsetname: Union[str, None] = None,
     ) -> None:
         """
-        This function run a cell extraction algorithm, detect events,
-        auto accept_reject and multiplane registration
+        This function run a cell extraction algorithm, detect events
+        and auto accept_reject
 
         Parameters
         ----------
@@ -946,13 +948,45 @@ class isx_files_handler:
         if verbose:
             print("accept reject cells, done")
 
+    def run_multiplate_registration(
+        self,
+        overwrite: bool = False,
+        verbose: bool = False,
+        detection_params: Union[dict, None] = None,
+        accept_reject_params: Union[dict, None] = None,
+        multiplane_params: Union[dict, None] = None,
+        cellsetname: Union[str, None] = None,
+    ) -> None:
+        """
+        This function run a multiplane registration, detect events,
+        and auto accept_reject
+
+        Parameters
+        ----------
+        cellsetname : str
+            Cellset name used, usually: 'cnmfe' or 'pca-ica'
+        overwrite : bool, optional
+            Force compute everything again, by default False
+        verbose : bool, optional
+            Show additional messages, by default False
+        detection_params : Union[dict,None], optional
+            Parameters for event detection, by default None
+        accept_reject_params : Union[dict,None], optional
+            Parameters for automatic accept_reject cell, by default None
+        multiplane_params : Union[dict,None], optional
+            Parameters for multiplane registration, by default None
+
+        Returns
+        -------
+        None
+
+        """
         if len([True for x in self.focus_files.values() if len(x) > 1]) == 0:
             return
-
-        # multiplane_registration
-        if verbose:
-            print("Starting multiplane registration:...")
+        ed_parameters = self.default_parameters["event_detection"].copy()
+        ar_parameters = self.default_parameters["accept_reject"].copy()
         mpr_parameters = self.default_parameters["multiplane_registration"].copy()
+
         if multiplane_params is not None:
             for key, value in multiplane_params.items():
                 assert key in mpr_parameters, f"The parameter: {key} does not exist"
