@@ -107,7 +107,7 @@ class isx_files_handler:
                 # this will extend the single inputs
                 lists_inputs[k] = v * len_list
         meta = {
-            "main_data_folder": main_data_folder,
+            "main_data_folder": lists_inputs['main_data_folder'],
             "outputsfolders": [],
             "recording_labels": [],
             "rec_paths": [],
@@ -175,6 +175,7 @@ class isx_files_handler:
                     metadata[file] = copy.deepcopy(meta)
                     metadata[file]["outputsfolders"] = [str(Path(outf) / subfolder)]
                     metadata[file]["rec_paths"] = [file]
+                    print(metadata[file]['rec_paths'])
                     metadata[file]["resolution"] = [video.spacing.num_pixels]
                     metadata[file]["duration"] = [
                         video.timing.num_samples * video.timing.period.to_usecs() / 1e6
@@ -292,7 +293,8 @@ class isx_files_handler:
             files = glob(
                 os.path.join(
                     base_folder, os.path.splitext(fpatter)[0] + "_metadata.json"
-                )
+                ),
+                recursive = True
             )
             for f in files:
                 if f in loaded_meta_files:
