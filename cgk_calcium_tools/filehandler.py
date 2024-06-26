@@ -16,6 +16,8 @@ from .files_io import (
     same_json_or_remove,
     json_filename,
 )
+from ipywidgets import IntProgress, Layout
+from IPython.display import display
 
 
 def ifstr2list(x) -> list:
@@ -63,11 +65,11 @@ class isx_files_handler:
         main_data_folder: Union[str, list] = ".",
         outputsfolders: Union[str, list] = ".",
         data_subfolders: Union[str, list] = ".",
-        files_patterns: Union[str, list] = ".isx",
+        files_patterns: Union[str, list] = "**/*.isxd",
         processing_steps: list = ["PP", "TR", "BP", "MC"],
         single_file_match: bool = True,
         recording_labels: Union[list, None] = None,
-        check_new_imputs: bool = True,
+        check_new_inputs: bool = True,
         parameters_path: str = os.path.join(
             os.path.dirname(__file__), "default_parameter.json"
         ),
@@ -125,9 +127,10 @@ class isx_files_handler:
             lists_inputs["files_patterns"],
             lists_inputs["outputsfolders"],
         ):
-            if check_new_imputs:
+            if check_new_inputs:
                 # From raw data origin
-                files = glob(str(Path(mainf) / subfolder / fpatter), recursive=False)
+                
+                files = glob(str(Path(mainf) / subfolder / fpatter),  recursive=True)
                 assert len(files) > 0, "No file found for {}".format(
                     str(Path(mainf) / subfolder / fpatter)
                 )
@@ -140,6 +143,25 @@ class isx_files_handler:
                     )
                 else:
                     files = [r for r in files if r not in meta["rec_paths"]]
+
+
+                # Initialize ipywidgets progress bar
+                progress_bar = IntProgress(
+                    value=0, 
+                    min=0,
+                    max=len(files), 
+                    style={
+                        'bar_color': '#3385ff',
+                        'description_width': 'auto'
+
+                    },
+                    description='Loading Files: 0/'+str(len(files)),
+                    layout=Layout(width='45%')
+                )
+            
+                # Display the progress bar with descriptions
+                display(progress_bar)                
+                
                 for file in files:
                     if not overwrite_metadata:
                         json_file = os.path.join(
@@ -244,6 +266,15 @@ class isx_files_handler:
                     metadata[file]["p_outputsfolders"].extend(
                         [metadata[file]["outputsfolders"][0]] * len(efocus)
                     )
+
+                    # Update progress bar
+                    progress_bar.value += 1
+                    if progress_bar.value == len(files):
+                        progress_bar.description = f'Loading Files: {progress_bar.value}/{len(files)} Complete!'
+                    else:
+                        progress_bar.description = f'Loading Files: {progress_bar.value}/{len(files)} files loaded'
+                    
+
                 for raw_path, intern_data in metadata.items():
                     json_file = os.path.join(
                         intern_data["outputsfolders"][0],
@@ -504,7 +535,7 @@ class isx_files_handler:
         op : str
             Preprocessing operation to run
         keep_json : bool, optional
-            If True, it does not remove json file associated to output file which will be remove. By default True.
+            If True, it does not remove the json file associated with the output file which will be removed. By default True.
 
         Returns
         -------
