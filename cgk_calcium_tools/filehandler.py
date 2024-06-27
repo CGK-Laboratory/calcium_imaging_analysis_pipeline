@@ -46,8 +46,8 @@ class isx_files_handler:
     processing_steps: list, optional
         Naming steps will be use, adding one affter the previous ones. By default "["PP", "TR", "BP", "MC"]"
     single_file_match: bool, optional
-        If True it will check then one and only one file is found with the pattern in
-        its folder. By default "True"
+        If True the pipeline will expect one .isx file per folder listed in the 'files_patterns' 
+        variable. By default "False"
     recording_labels: list, optional
         Name the recorded file with a label to make it easier to recognize. By default "None"
     files_list_log: str or None, optional
@@ -58,6 +58,8 @@ class isx_files_handler:
         By default "default_parameter.json" in the same folder as this file.
     overwrite_metadata: bool, optional
         If True overwrite metadata json file. By default False.
+    skip_pattern: str, optional
+        Pipeline ignores files that contain this string, note case sensitive. By defualt empty. skip_files
     """
 
     def __init__(
@@ -66,31 +68,41 @@ class isx_files_handler:
         outputsfolders: Union[str, list] = ".",
         data_subfolders: Union[str, list] = ".",
         files_patterns: Union[str, list] = "**/*.isxd",
-        processing_steps: list = ["PP", "TR", "BP", "MC"],
-        single_file_match: bool = True,
+        processing_steps: list = ["DI", "PP", "TR", "BP", "MC"],
+        single_file_match: bool = False,
         recording_labels: Union[list, None] = None,
         check_new_inputs: bool = True,
         parameters_path: str = os.path.join(
             os.path.dirname(__file__), "default_parameter.json"
         ),
         overwrite_metadata: bool = False,
+        skip_pattern: str = None,
     ):
+        
         self.processing_steps = processing_steps
+        self.deinterleave_output_files = []
+        
+        #check if the parameters file exists at the given path, open and load. 
         assert os.path.exists(parameters_path), "parameters file does not exist"
         with open(parameters_path) as file:
             self.default_parameters = json.load(file)
+        
+        #check if step TR listed more than once 
         assert (
             len([s for s in processing_steps if s.startswith("TR")]) <= 1
         ), "Pipeline can't handle multiple trims"
 
+
         if recording_labels is not None:
             recording_labels_iter = iter(recording_labels)
+        
         lists_inputs = {
             "main_data_folder": ifstr2list(main_data_folder),
             "outputsfolders": ifstr2list(outputsfolders),
             "data_subfolders": ifstr2list(data_subfolders),
             "files_patterns": ifstr2list(files_patterns),
         }
+
         len_list_variables = np.unique([len(v) for v in lists_inputs.values()])
         len_list_variables = len_list_variables[len_list_variables > 1]
 
@@ -106,6 +118,7 @@ class isx_files_handler:
             if len(v) != len_list:
                 # this will extend the single inputs
                 lists_inputs[k] = v * len_list
+        
         meta = {
             "main_data_folder": lists_inputs['main_data_folder'],
             "outputsfolders": [],
@@ -120,7 +133,9 @@ class isx_files_handler:
             "duration": [],
             "frames_per_second": [],
         }
+
         loaded_meta_files = [] #this variable is used to don't load multiple times the same json
+        
         for mainf, subfolder, fpatter, outf in zip(
             lists_inputs["main_data_folder"],
             lists_inputs["data_subfolders"],
@@ -128,10 +143,12 @@ class isx_files_handler:
             lists_inputs["outputsfolders"],
         ):
             if check_new_inputs:
-                # From raw data origin
+                allFiles = glob(str(Path(mainf) / subfolder / fpatter),  recursive=True) #grabs all the files with fpatter.
+                files = [file for file in allFiles if skip_pattern not in Path(file).name] #filter skip_pattern files out
+                print(f'{len(files)} files found, {len(allFiles)-len(files)} file(s) skipped') #prints what it found
                 
-                files = glob(str(Path(mainf) / subfolder / fpatter),  recursive=True)
-                assert len(files) > 0, "No file found for {}".format(
+                #Error no file found. 
+                assert len(files) > 0, "No file(s) found for {}".format(
                     str(Path(mainf) / subfolder / fpatter)
                 )
                 metadata = {}
@@ -139,11 +156,9 @@ class isx_files_handler:
                 if single_file_match:
                     assert len(files) == 1, "Multiple files found for {}.".format(
                         str(Path(mainf) / subfolder / fpatter)
-                        # Include a better msg that explain what this error is and how to fix it. 
                     )
                 else:
                     files = [r for r in files if r not in meta["rec_paths"]]
-
 
                 # Initialize ipywidgets progress bar
                 progress_bar = IntProgress(
@@ -175,7 +190,6 @@ class isx_files_handler:
                     metadata[file] = copy.deepcopy(meta)
                     metadata[file]["outputsfolders"] = [str(Path(outf) / subfolder)]
                     metadata[file]["rec_paths"] = [file]
-                    print(metadata[file]['rec_paths'])
                     metadata[file]["resolution"] = [video.spacing.num_pixels]
                     metadata[file]["duration"] = [
                         video.timing.num_samples * video.timing.period.to_usecs() / 1e6
@@ -289,6 +303,7 @@ class isx_files_handler:
                         json.dump(intern_data, j_file)
             else:
                 assert not overwrite_metadata, "Overwriting json file not possible"
+            
             base_folder = os.path.join(outf, subfolder)
             files = glob(
                 os.path.join(
@@ -296,6 +311,8 @@ class isx_files_handler:
                 ),
                 recursive = True
             )
+
+
             for f in files:
                 if f in loaded_meta_files:
                     continue
@@ -310,73 +327,6 @@ class isx_files_handler:
                             meta[key_j].extend(value_j)
                 loaded_meta_files.append(f)
         self.__dict__.update(meta)
-
-    def de_interleave(self, overwrite: bool = False) -> None:
-        """
-        This function applies the isx.de_interleave function, which de-interleaves multiplane movies
-
-        Parameters
-        ----------
-        overwrite : Bool, optional
-            If True the function erases the previous information; otherwise, it appends to a list.
-            By default "False"
-
-        Returns
-        -------
-        None
-
-        """
-        print("de_interleaving movies, please wait...")
-        for (main_file, planes_fs), focus in zip(self.focus_files.items(), self.efocus):
-            if len(focus) > 1:  # has multiplane
-                existing_files = []
-                for sp_file in planes_fs:
-                    dirname = os.path.dirname(sp_file)
-                    json_file = os.path.splitext(sp_file)[0] + ".json"
-                    if os.path.exists(sp_file):
-                        if overwrite:
-                            os.remove(sp_file)
-                            if os.path.exists(json_file):
-                                os.remove(json_file)
-                        else:
-                            if same_json_or_remove(
-                                parameters={
-                                    "input_movie_files": main_file,
-                                    "output_movie_files": [
-                                        os.path.basename(p) for p in planes_fs
-                                    ],
-                                    "in_efocus_values": focus,
-                                },
-                                input_files_keys=["input_movie_files"],
-                                output=sp_file,
-                                verbose=False,
-                            ):
-                                existing_files.append(sp_file)
-                if len(existing_files) != len(planes_fs):  # has files to run
-                    for f in existing_files:  # remove existing planes
-                        os.remove(f)
-                    try:
-                        isx.de_interleave(main_file, planes_fs, focus)
-
-                    except Exception as err:
-                        print("Reading: ", main_file)
-                        print("Writting: ", planes_fs)
-                        raise err
-
-                data = {
-                    "input_movie_files": main_file,
-                    "output_movie_files": [os.path.basename(p) for p in planes_fs],
-                    "in_efocus_values": focus,
-                }
-                # for sp_file in planes_fs:
-                write_log_file(
-                    params=data,
-                    dir_name=dirname,
-                    input_files_keys=["input_movie_files"],
-                    output_file_key="output_movie_files",
-                )
-
-        print("done")
 
     def get_pair_filenames(self, operation: str) -> Tuple[list, list]:
         """
@@ -544,7 +494,12 @@ class isx_files_handler:
         None
 
         """
-        paths = self.get_filenames(op)
+        if op == 'DI':
+            paths = self.deinterleave_output_files
+        else:
+            paths = self.get_filenames(op)
+        
+        print(paths)
         for path in paths:
             if os.path.exists(path):
                 os.remove(path)
@@ -599,6 +554,7 @@ class isx_files_handler:
                 remove_file_and_json(output)
 
         steps_list = {
+            "DI": "de-interleave",
             "PP": "preprocessing",
             "BP": "spatial_filter",
             "MC": "motion_correct",
@@ -609,11 +565,14 @@ class isx_files_handler:
         assert len(operation) == 1, f"Step {op} not starts with {steps_list}."
         operation = operation[0]
 
-        parameters = self.default_parameters[operation].copy()
-        for key, value in kws.items():
-            assert key in parameters, f"The parameter: {key} does not exist"
-            parameters[key] = value
-
+        if not op.startswith('DI'):
+            parameters = self.default_parameters[operation].copy()
+            for key, value in kws.items():
+                assert key in parameters, f"The parameter: {key} does not exist"
+                parameters[key] = value
+        
+        #TASK: No need for this step at this point - Can you confirm Fernando?
+        '''
         if self.processing_steps.index(op) == 0:  # if first step
             # check if all exist
             for finput, _ in self.get_pair_filenames(op):
@@ -621,21 +580,22 @@ class isx_files_handler:
                     finput
                 ), f"""File {finput} not exist:
                     Run .de_interleave() to De-interleave multiplane movies"""
+        '''
 
+        if op.startswith('DI'):
+            print("De-interleaving movies, please wait...")
+            self.deinterleave_output_files = de_interleave(focus_files = self.focus_files, efocus = self.efocus)
         if op.startswith("PP"):
             print("Preprocessing movies, please wait...")
             preprocess_step(pairlist, parameters, verbose)
-
         if op.startswith("BP"):
             print("Applying bandpass filter, please wait...")
             spatial_filter_step(pairlist, parameters, verbose)
-
         if op.startswith("MC"):
             print("Applying motion correction. Please wait...")
             motion_correct_step(
                 translation_files, crop_rect_files, parameters, pairlist, verbose
             )
-
         if op.startswith("TR"):
             print("Trim movies...")
             trim_movie(pairlist, parameters, verbose)
@@ -1339,6 +1299,74 @@ class isx_files_handler:
                 json_file = os.path.splitext(output)[0] + ".json"
 
                 self._recompute_from_log(json_file)
+        print("done")
+
+
+def de_interleave(focus_files: dict, efocus: list, overwrite: bool = False) -> None:
+        """
+        This function applies the isx.de_interleave function, which de-interleaves multiplane movies
+
+        Parameters
+        ----------
+        overwrite : Bool, optional
+            If True the function erases the previous information; otherwise, it appends to a list.
+            By default "False"
+
+        Returns
+        -------
+        None
+
+        """
+        for (main_file, planes_fs), focus in zip(focus_files.items(), efocus):
+            if len(focus) > 1:  # has multiplane
+                existing_files = []
+                for sp_file in planes_fs:
+                    dirname = os.path.dirname(sp_file)
+                    json_file = os.path.splitext(sp_file)[0] + ".json"
+                    if os.path.exists(sp_file):
+                        if overwrite:
+                            os.remove(sp_file)
+                            if os.path.exists(json_file):
+                                os.remove(json_file)
+                        else:
+                            if same_json_or_remove(
+                                parameters={
+                                    "input_movie_files": main_file,
+                                    "output_movie_files": [
+                                        os.path.basename(p) for p in planes_fs
+                                    ],
+                                    "in_efocus_values": focus,
+                                },
+                                input_files_keys=["input_movie_files"],
+                                output=sp_file,
+                                verbose=False,
+                            ):
+                                existing_files.append(sp_file)
+                if len(existing_files) != len(planes_fs):  # has files to run
+                    for f in existing_files:  # remove existing planes
+                        os.remove(f)
+                    try:
+                        isx.de_interleave(main_file, planes_fs, focus)
+
+                    except Exception as err:
+                        print("Reading: ", main_file)
+                        print("Writting: ", planes_fs)
+                        raise err
+
+                data = {
+                    "input_movie_files": main_file,
+                    "output_movie_files": [os.path.basename(p) for p in planes_fs],
+                    "in_efocus_values": focus,
+                }
+                # for sp_file in planes_fs:
+                write_log_file(
+                    params=data,
+                    dir_name=dirname,
+                    input_files_keys=["input_movie_files"],
+                    output_file_key="output_movie_files",
+                )
+        #Need to return value to save the output values back in the object for the remove function later used.
+        return planes_fs
         print("done")
 
 
