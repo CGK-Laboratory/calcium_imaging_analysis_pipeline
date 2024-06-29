@@ -35,15 +35,11 @@ def create_inscopix_projects(fh: isx_files_handler, cellsetname="pca-ica"):
         single_planes_info = []
         for dff, cellset, ev_det in zip(dffs, cellsets, evs_dets):
             parsed_plane = single_plane_template
-
             movie = isx.Movie.read(dff)
-            num_samples = movie.timing.num_samples
-            dmin = 0
-            dmax = 0
-            for i in range(num_samples):
-                movie_data = movie.get_frame_data(i)
-                dmin = min(dmin, np.min(movie_data))
-                dmax = max(dmax, np.max(movie_data))
+            movie_data = movie.get_frame_data(0)
+            dmin = np.min(movie_data)
+            dmax = np.max(movie_data)
+            del movie
             replacements = {
                 "{eventdet_path}": ev_det,
                 "{eventdet_name}": Path(ev_det).name,
@@ -54,7 +50,7 @@ def create_inscopix_projects(fh: isx_files_handler, cellsetname="pca-ica"):
                 "{dmax}": str(dmax),
                 "{dmin}": str(dmin)
             }
-            del movie
+            
             for key, value in replacements.items():
                 parsed_plane = parsed_plane.replace(key, value)
 
