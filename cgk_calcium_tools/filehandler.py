@@ -143,6 +143,23 @@ class isx_files_handler:
                     )
                 else:
                     files = [r for r in files if r not in meta["rec_paths"]]
+
+                # Initialize ipywidgets progress bar
+                progress_bar = IntProgress(
+                    value=0, 
+                    min=0,
+                    max=len(files), 
+                    style={
+                        'bar_color': '#3385ff',
+                        'description_width': 'auto'
+                    },
+                    description=f'Loading Files: 0/{len(files)}, files loaded',
+                    layout=Layout(width='45%')
+                )
+            
+                # Display the progress bar with descriptions
+                display(progress_bar)                
+                
                 for file in files:
                     if not overwrite_metadata:
                         json_file = os.path.join(
@@ -367,15 +384,20 @@ class isx_files_handler:
             operation in self.processing_steps
         ), f"operation must be in the list {self.processing_steps}, got: {operation}"
 
-        opi = self.processing_steps.index(operation)
+        local_processing_steps = self.processing_steps
+        if local_processing_steps[0] == "DI":
+            local_processing_steps.remove("DI")
+
+        opi = local_processing_steps.index(operation)
+
         outputs = []
         inputs = []
-        suffix_out = "-" + "-".join(self.processing_steps[: opi + 1]) + ".isxd"
+        suffix_out = "-" + "-".join(local_processing_steps[: opi + 1]) + ".isxd"
         if opi == 0:
             suffix_in = None
             inputs = self.p_rec_paths
         else:
-            suffix_in = "-" + "-".join(self.processing_steps[:opi]) + ".isxd"
+            suffix_in = "-" + "-".join(local_processing_steps[:opi]) + ".isxd"
 
         for ofolder, file in zip(self.p_outputsfolders, self.p_rec_paths):
             outputs.append(str(Path(ofolder, Path(file).stem + suffix_out)))
@@ -550,7 +572,8 @@ class isx_files_handler:
         """
 
         if pairlist is None:
-            pairlist = self.get_pair_filenames(op)
+            if op != "DI":
+                pairlist = self.get_pair_filenames(op)
             if op == "MC":
                 translation_files = self.get_results_filenames(
                     "translations.csv", op=op
@@ -579,11 +602,13 @@ class isx_files_handler:
         assert len(operation) == 1, f"Step {op} not starts with {steps_list}."
         operation = operation[0]
 
-        parameters = self.default_parameters[operation].copy()
-        for key, value in kws.items():
-            assert key in parameters, f"The parameter: {key} does not exist"
-            parameters[key] = value
-
+        if op != "DI":
+            parameters = self.default_parameters[operation].copy()
+            for key, value in kws.items():
+                assert key in parameters, f"The parameter: {key} does not exist"
+                parameters[key] = value
+        
+        #TASK: No need for this step at this point - Can you confirm Fernando?
         if self.processing_steps.index(op) == 0:  # if first step
             # check if all exist
             for finput, _ in self.get_pair_filenames(op):
@@ -609,8 +634,6 @@ class isx_files_handler:
         if op.startswith("TR"):
             print("Trim movies...")
             trim_movie(pairlist, parameters, verbose)
-
-        print("done")
 
     def project_movie(
         self,
@@ -1312,6 +1335,95 @@ class isx_files_handler:
         print("done")
 
 
+def de_interleave(focus_files: dict, efocus: list, overwrite: bool = False) -> None:
+        """
+        This function applies the isx.de_interleave function, which de-interleaves multiplane movies
+
+        Parameters
+        ----------
+        overwrite : Bool, optional
+            If True the function erases the previous information; otherwise, it appends to a list.
+            By default "False"
+
+        Returns
+        -------
+        None
+
+        """
+        # Initialize ipywidgets progress bar
+        num_files = len(focus_files.keys())
+        progress_bar = IntProgress(
+            value=0, 
+            min=0,
+            max=num_files, 
+            style={
+                'bar_color': '#3385ff',
+                'description_width': 'auto'
+                },
+            description=f'Deinterleaving Files: 0/{num_files} files deinterleaved',
+            layout=Layout(width='45%')
+            )
+            
+        # Display the progress bar with descriptions
+        display(progress_bar) 
+        
+        for (main_file, planes_fs), focus in zip(focus_files.items(), efocus):
+            if len(focus) > 1:  # has multiplane
+                existing_files = []
+                for sp_file in planes_fs:
+                    dirname = os.path.dirname(sp_file)
+                    json_file = os.path.splitext(sp_file)[0] + ".json"
+                    if os.path.exists(sp_file):
+                        if overwrite:
+                            os.remove(sp_file)
+                            if os.path.exists(json_file):
+                                os.remove(json_file)
+                        else:
+                            if same_json_or_remove(
+                                parameters={
+                                    "input_movie_files": main_file,
+                                    "output_movie_files": [
+                                        os.path.basename(p) for p in planes_fs
+                                    ],
+                                    "in_efocus_values": focus,
+                                },
+                                input_files_keys=["input_movie_files"],
+                                output=sp_file,
+                                verbose=False,
+                            ):
+                                existing_files.append(sp_file)
+                if len(existing_files) != len(planes_fs):  # has files to run
+                    for f in existing_files:  # remove existing planes
+                        os.remove(f)
+                    try:
+                        isx.de_interleave(main_file, planes_fs, focus)
+
+                    except Exception as err:
+                        print("Reading: ", main_file)
+                        print("Writting: ", planes_fs)
+                        raise err
+                data = {
+                    "input_movie_files": main_file,
+                    "output_movie_files": [os.path.basename(p) for p in planes_fs],
+                    "in_efocus_values": focus,
+                }
+                # for sp_file in planes_fs:
+                write_log_file(
+                    params=data,
+                    dir_name=dirname,
+                    input_files_keys=["input_movie_files"],
+                    output_file_key="output_movie_files",
+                )
+            # Update progress bar
+            progress_bar.value += 1
+            if progress_bar.value == num_files:
+                progress_bar.description = f'Deinterleaving Files: {progress_bar.value}/{num_files} Complete!'
+            else:
+                progress_bar.description = f'Deinterleaving Files: {progress_bar.value}/{num_files} files deinterleaved'
+        #Need to return value to save the output values back in the object for the remove function later used.
+        return planes_fs
+
+
 def get_segment_from_movie(
     inputfile: str,
     outputfile: str,
@@ -1498,6 +1610,22 @@ def preprocess_step(
     None
 
     """
+    num_files = len(pairlist[0])
+    # Initialize ipywidgets progress bar
+    progress_bar = IntProgress(
+        value=0, 
+        min=0,
+        max=num_files, 
+        style={
+            'bar_color': '#3385ff',
+            'description_width': 'auto'
+            },
+        description=f'Preprocessing Files: 0/{num_files} files complete',
+        layout=Layout(width='45%')
+        )
+    # Display the progress bar with descriptions
+    display(progress_bar) 
+    
     for input, output in pairlist:
         if isinstance(parameters["spatial_downsample_factor"], str):
             res_idx, value = parameters["spatial_downsample_factor"].split("_")
@@ -1548,6 +1676,12 @@ def preprocess_step(
         )
         if verbose:
             print("{} preprocessing completed. {} frames fixed.".format(output, nfixed))
+        # Update progress bar
+        progress_bar.value += 1
+        if progress_bar.value == num_files:
+            progress_bar.description = f'Preprocessing Files: {progress_bar.value}/{num_files} Complete!'
+        else:
+            progress_bar.description = f'Preprocessing Files: {progress_bar.value}/{num_files} files complete'
 
 
 def spatial_filter_step(
