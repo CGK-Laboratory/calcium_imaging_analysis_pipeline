@@ -1,0 +1,69 @@
+
+            {
+                "children": [
+                {
+                    "children": [
+                        {
+                            "children": [],
+                            "dataSets": [
+                                {
+                                    "dataSetType": 5,
+                                    "fileName": "{eventdet_path}",
+                                    "history": {
+                                        "inputParameters": {},
+                                        "operation": "Import"
+                                    },
+                                    "imported": true,
+                                    "name": "{eventdet_name}",
+                                    "properties": {
+                                        "dmax": 0.0,
+                                        "dmin": 0.0
+                                    }
+                                }
+                            ],
+                            "isUnitary": true,
+                            "itemType": 1,
+                            "name": "{eventdet_name}"
+                        }
+                    ],
+                    "dataSets": [
+                        {
+                            "dataSetType": 1,
+                            "fileName": "{cellset_path}",
+                            "history": {
+                                "inputParameters": {},
+                                "operation": "Import"
+                            },
+                            "imported": true,
+                            "name": "{cellset_name}",
+                            "properties": {
+                                "dmax": 0.0,
+                                "dmin": 0.0
+                            }
+                        }
+                    ],
+                    "isUnitary": true,
+                    "itemType": 1,
+                    "name": "{cellset_name}"
+                }
+            ],
+            "dataSets": [
+                {
+                    "dataSetType": 0,
+                    "fileName": "{DFF_path}",
+                    "history": {
+                        "inputParameters": {},
+                        "operation": "Import"
+                    },
+                    "imported": true,
+                    "name": "{DFF_name}",
+                    "properties": {
+                        "dmax": {dmax},
+                        "dmin": {dmin}
+                    }
+                }
+            ],
+            "isUnitary": true,
+            "itemType": 1,
+            "name": "{DFF_name}"
+            }
