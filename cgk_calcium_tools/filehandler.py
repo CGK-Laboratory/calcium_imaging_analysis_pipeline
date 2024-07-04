@@ -25,6 +25,7 @@ def ifstr2list(x) -> list:
         return x
     return [x]
 
+
 class isx_files_handler:
     """
     This class helps to iterate over files for inscopix processing
@@ -159,24 +160,10 @@ class isx_files_handler:
                     )
                 else:
                     files = [r for r in files if r not in meta["rec_paths"]]
-
-                # Initialize ipywidgets progress bar
-                progress_bar = IntProgress(
-                    value=0, 
-                    min=0,
-                    max=len(files), 
-                    style={
-                        'bar_color': '#3385ff',
-                        'description_width': 'auto'
-
-                    },
-                    description='Loading Files: 0/'+str(len(files)),
-                    layout=Layout(width='45%')
-                )
-            
-                # Display the progress bar with descriptions
-                display(progress_bar)                
                 
+                # Initialize ipywidgets progress bar
+                pb = progress_bar(len(files), 'Loading')
+                                
                 for file in files:
                     if not overwrite_metadata:
                         json_file = os.path.join(
@@ -283,12 +270,7 @@ class isx_files_handler:
                     )
 
                     # Update progress bar
-                    progress_bar.value += 1
-                    if progress_bar.value == len(files):
-                        progress_bar.description = f'Loading Files: {progress_bar.value}/{len(files)} Complete!'
-                    else:
-                        progress_bar.description = f'Loading Files: {progress_bar.value}/{len(files)} files loaded'
-                    
+                    update_progress_bar(pb, "Loading")
 
                 for raw_path, intern_data in metadata.items():
                     json_file = os.path.join(
@@ -347,15 +329,22 @@ class isx_files_handler:
             operation in self.processing_steps
         ), f"operation must be in the list {self.processing_steps}, got: {operation}"
 
-        opi = self.processing_steps.index(operation)
+        local_processing_steps = self.processing_steps
+        if local_processing_steps[0] == "DI":
+            local_processing_steps.remove("DI")
+
+        opi = local_processing_steps.index(operation)
+
         outputs = []
         inputs = []
-        suffix_out = "-" + "-".join(self.processing_steps[: opi + 1]) + ".isxd"
+
+        suffix_out = "-" + "-".join(local_processing_steps[: opi + 1]) + ".isxd"
+        
         if opi == 0:
             suffix_in = None
             inputs = self.p_rec_paths
         else:
-            suffix_in = "-" + "-".join(self.processing_steps[:opi]) + ".isxd"
+            suffix_in = "-" + "-".join(local_processing_steps[:opi]) + ".isxd"
 
         for ofolder, file in zip(self.p_outputsfolders, self.p_rec_paths):
             outputs.append(str(Path(ofolder, Path(file).stem + suffix_out)))
@@ -535,7 +524,8 @@ class isx_files_handler:
         """
 
         if pairlist is None:
-            pairlist = self.get_pair_filenames(op)
+            if op != "DI":
+                pairlist = self.get_pair_filenames(op)
             if op == "MC":
                 translation_files = self.get_results_filenames(
                     "translations.csv", op=op
@@ -565,7 +555,7 @@ class isx_files_handler:
         assert len(operation) == 1, f"Step {op} not starts with {steps_list}."
         operation = operation[0]
 
-        if not op.startswith('DI'):
+        if op != 'DI':
             parameters = self.default_parameters[operation].copy()
             for key, value in kws.items():
                 assert key in parameters, f"The parameter: {key} does not exist"
@@ -1317,6 +1307,10 @@ def de_interleave(focus_files: dict, efocus: list, overwrite: bool = False) -> N
         None
 
         """
+        
+        # Initialize progress bar
+        pb = progress_bar(len(focus_files), 'Deinterleaving')
+        
         for (main_file, planes_fs), focus in zip(focus_files.items(), efocus):
             if len(focus) > 1:  # has multiplane
                 existing_files = []
@@ -1365,6 +1359,10 @@ def de_interleave(focus_files: dict, efocus: list, overwrite: bool = False) -> N
                     input_files_keys=["input_movie_files"],
                     output_file_key="output_movie_files",
                 )
+
+            # Update progress bar
+            update_progress_bar(pb, "Deinterleaving")
+        
         #Need to return value to save the output values back in the object for the remove function later used.
         return planes_fs
         print("done")
@@ -1497,6 +1495,8 @@ def motion_correct_step(
     Examples
     --------
     """
+    # Initialize progress bar
+    pb = progress_bar(len(list(pairlist)), 'Applying Motion Correction to')
     for i, (input, output) in enumerate(pairlist):
         new_data = {
             "input_movie_files": os.path.basename(input),
@@ -1533,6 +1533,8 @@ def motion_correct_step(
         )
         if verbose:
             print("{} motion correction completed".format(output))
+        # Update progress bar
+        update_progress_bar(pb, "Applying Motion Correction to")
 
 
 def preprocess_step(
@@ -1556,6 +1558,10 @@ def preprocess_step(
     None
 
     """
+    
+    # Initialize progress bar
+    pb = progress_bar(len(list(pairlist)), 'Preprocessing')
+    
     for input, output in pairlist:
         if isinstance(parameters["spatial_downsample_factor"], str):
             res_idx, value = parameters["spatial_downsample_factor"].split("_")
@@ -1606,6 +1612,8 @@ def preprocess_step(
         )
         if verbose:
             print("{} preprocessing completed. {} frames fixed.".format(output, nfixed))
+        # Update progress bar
+        update_progress_bar(pb, "Preprocessing")
 
 
 def spatial_filter_step(
@@ -1629,6 +1637,10 @@ def spatial_filter_step(
     None
 
     """
+    
+    # Initialize progress bar
+    pb = progress_bar(len(list(pairlist)), 'Applying bandpass filter to')
+
     for input, output in pairlist:
         parameters.update(
             {
@@ -1659,6 +1671,8 @@ def spatial_filter_step(
         )
         if verbose:
             print("{} bandpass filtering completed".format(output))
+        # Update progress bar
+        update_progress_bar(pb, "Applying bandpass filter to")
 
 
 def trim_movie(
@@ -1682,9 +1696,14 @@ def trim_movie(
     None
 
     """
+    
     assert (
         user_parameters["video_len"] is not None
     ), "Trim movie requires parameter video len"
+    
+    # Initialize progress bar
+    pb = progress_bar(len(list(pairlist)), 'Trimming')
+    
     for input, output in pairlist:
         parameters = {
             "input_movie_file": os.path.basename(input),
@@ -1721,6 +1740,8 @@ def trim_movie(
             input_files_keys=["input_movie_file"],
             output_file_key="output_movie_file",
         )
+        # Update progress bar
+        update_progress_bar(pb, "Trimming")
 
 
 def get_efocus(gpio_file: str) -> list:
@@ -1775,3 +1796,30 @@ def parameters_for_isx(
             del copy_dict[key]
     copy_dict.update(to_update)
     return copy_dict
+
+
+def progress_bar(end_amount, description_step):
+    # Initialize ipywidgets progress bar
+    progress_bar = IntProgress(
+        value=0, 
+        min=0,
+        max=end_amount, 
+        style={
+            'bar_color': '#3385ff',
+            'description_width': 'auto'
+            },
+        description= f'{description_step} Movies: 0/{end_amount} movie(s)',
+        layout=Layout(width='45%')
+        )
+            
+    # Display the progress bar with descriptions
+    display(progress_bar)
+    return progress_bar
+
+
+def update_progress_bar(progress_bar, description_step):
+    progress_bar.value += 1
+    if progress_bar.value == progress_bar.max:
+        progress_bar.description = f'{description_step} Movies: {progress_bar.value}/{progress_bar.max} Complete!'
+    else:
+        progress_bar.description = f'{description_step} Movies: {progress_bar.value}/{progress_bar.max} movie(s) loaded'
