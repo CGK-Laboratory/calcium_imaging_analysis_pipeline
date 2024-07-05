@@ -166,12 +166,14 @@ class isx_files_handler:
                         str(Path(mainf) / subfolder / fpatter)
                     )
                 else:
+                    # removes files already in metadata
                     files = [r for r in files if r not in meta["rec_paths"]]
                 
                 # Initializes progress bar
                 pb = progress_bar(len(files), 'Loading')
                                 
                 for file in files:
+                    # skip processing if metadata file already exists and overwrite is not allowed
                     if not overwrite_metadata:
                         json_file = os.path.join(
                             str(Path(outf) / subfolder),
@@ -180,6 +182,8 @@ class isx_files_handler:
                         )
                         if os.path.exists(json_file):
                             continue
+                    
+                    # Read the video file and grab metadata information
                     video = isx.Movie.read(file)
                     metadata[file] = copy.deepcopy(meta)
                     metadata[file]["outputsfolders"] = [str(Path(outf) / subfolder)]
@@ -192,6 +196,8 @@ class isx_files_handler:
                         1 / (video.timing.period.to_usecs() / 1e6)
                     ]
 
+                    # Assign recording labels, if true -> same as rec_paths
+                    # Else use input recording labels 
                     if recording_labels is None:
                         metadata[file]["recording_labels"] = metadata[file]["rec_paths"]
                     else:
@@ -202,7 +208,7 @@ class isx_files_handler:
                         )
                         metadata[file]["recording_labels"] = next(recording_labels_iter)
 
-                    # # Lookig for multiplanes:
+                    # Lookig for multiplanes:
                     for ofolder in metadata[file]["outputsfolders"]:
                         os.makedirs(ofolder, exist_ok=True)
                     raw_gpio_file = (
@@ -246,6 +252,8 @@ class isx_files_handler:
                             )
                     video.flush()
                     del video  # usefull for windows
+                    
+                    # Update metadata with focus data
                     if len(efocus) == 1:
                         metadata[file]["focus_files"][file] = [file]
                         metadata[file]["p_rec_paths"].append(file)
@@ -278,7 +286,8 @@ class isx_files_handler:
 
                     # Update progress bar
                     update_progress_bar(pb, "Loading")
-
+                
+                # Save metadata to JSON files
                 for raw_path, intern_data in metadata.items():
                     json_file = os.path.join(
                         intern_data["outputsfolders"][0],
@@ -293,6 +302,7 @@ class isx_files_handler:
             else:
                 assert not overwrite_metadata, "Overwriting json file not possible"
             
+            # Load metadata from existing JSON files
             base_folder = os.path.join(outf, subfolder)
             files = glob(
                 os.path.join(
@@ -315,6 +325,7 @@ class isx_files_handler:
                         else:
                             meta[key_j].extend(value_j)
                 loaded_meta_files.append(f)
+        # Update object dictionary with metadata
         self.__dict__.update(meta)
 
     def get_pair_filenames(self, operation: str) -> Tuple[list, list]:
@@ -330,13 +341,17 @@ class isx_files_handler:
         -------
         Tuple[list,list]
             pair of input and output file paths
-
         """
+
+        # Checks if operation is in the lsit of processing steps
         assert (
             operation in self.processing_steps
         ), f"operation must be in the list {self.processing_steps}, got: {operation}"
 
+        # Copy the list of processing steps to a local variable
         local_processing_steps = self.processing_steps
+        
+        # Remove DI from list, if its first
         if local_processing_steps[0] == "DI":
             local_processing_steps.remove("DI")
 
@@ -349,7 +364,8 @@ class isx_files_handler:
         
         if opi == 0:
             suffix_in = None
-            inputs = self.p_rec_paths
+            #inputs = self.p_rec_paths
+            inputs = self.deinterleave_output_files
         else:
             suffix_in = "-" + "-".join(local_processing_steps[:opi]) + ".isxd"
 
