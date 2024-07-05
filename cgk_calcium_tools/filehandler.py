@@ -28,23 +28,24 @@ def ifstr2list(x) -> list:
 
 class isx_files_handler:
     """
-    This class helps to iterate over files for inscopix processing
+    This class helps handle and process Inscopix files/movies. 
 
     Parameters
     ----------
     main_data_folder : str or list, optional
-        Folder with data, after this path the output will share the folder structure.
-        If it's a list each element should correspond with each data_subfolders
-        and files_pattern. By default "."
+        Root folder containing the data. If a list each element should correspond
+        with elements in 'data_subfolders' and 'files_pattern'. Output data follows
+        the folder structure after this root folder. By default "."
     data_subfolders : str or list, optional
-        Where each file (or files) following each files_pattern element are. By default "."
+        Subfolders containing the files specified by 'files_patterns'. By default "."
     files_patterns : list, optional
-        Naming patterns for the files, and easy way to handle selection of one or
-        multiple files from the same folder. By default ".isx"
+        Naming patterns for the files. Also an easy way to select for one or
+        multiple files from the same folder. By default "**/*.isx" (selects all)
     outputsfolders : str or list, optional
-        Folder where the file structure (following only the data_subfolders) will be
-        copied and the results written. By default "."
+        Folder where the outputs are saved, following the file structure after 
+        'main_data_folder'. By default "."
     processing_steps: list, optional
+        List of processing steps to run, listed in order 
         Naming steps will be use, adding one affter the previous ones. By default "["PP", "TR", "BP", "MC"]"
     single_file_match: bool, optional
         If True the pipeline will expect one .isx file per folder listed in the 'files_patterns' 
@@ -60,9 +61,9 @@ class isx_files_handler:
     overwrite_metadata: bool, optional
         If True overwrite metadata json file. By default False.
     skip_pattern: str, optional
-        Pipeline ignores files that contain this string, note case sensitive. By defualt empty. skip_files
+        String pattern to ignore certain files. Case-sensitive. Default is None
     """
-
+    
     def __init__(
         self,
         main_data_folder: Union[str, list] = ".",
@@ -83,20 +84,21 @@ class isx_files_handler:
         self.processing_steps = processing_steps
         self.deinterleave_output_files = []
         
-        #check if the parameters file exists at the given path, open and load. 
+        # Check if the parameters file exists at the given path, open and load it. 
         assert os.path.exists(parameters_path), "parameters file does not exist"
         with open(parameters_path) as file:
             self.default_parameters = json.load(file)
         
-        #check if step TR listed more than once 
+        # Check if step TR is listed more than once 
         assert (
             len([s for s in processing_steps if s.startswith("TR")]) <= 1
         ), "Pipeline can't handle multiple trims"
 
-
+        # Initialize iterator for recording labels if provided 
         if recording_labels is not None:
             recording_labels_iter = iter(recording_labels)
         
+        # Convert string inputs to lists 
         lists_inputs = {
             "main_data_folder": ifstr2list(main_data_folder),
             "outputsfolders": ifstr2list(outputsfolders),
@@ -104,6 +106,7 @@ class isx_files_handler:
             "files_patterns": ifstr2list(files_patterns),
         }
 
+        # Ensure all list inputs are the same length
         len_list_variables = np.unique([len(v) for v in lists_inputs.values()])
         len_list_variables = len_list_variables[len_list_variables > 1]
 
@@ -135,7 +138,7 @@ class isx_files_handler:
             "frames_per_second": [],
         }
 
-        loaded_meta_files = [] #this variable is used to don't load multiple times the same json
+        loaded_meta_files = [] # Used to avoid loading the same json file multiple times
         
         for mainf, subfolder, fpatter, outf in zip(
             lists_inputs["main_data_folder"],
@@ -144,16 +147,20 @@ class isx_files_handler:
             lists_inputs["outputsfolders"],
         ):
             if check_new_inputs:
+                # Grab all the files matching the input parameters 
                 allFiles = glob(str(Path(mainf) / subfolder / fpatter),  recursive=True) #grabs all the files with fpatter.
+                # Filter out files matching the skip pattern
                 files = [file for file in allFiles if skip_pattern not in Path(file).name] #filter skip_pattern files out
-                print(f'{len(files)} files found, {len(allFiles)-len(files)} file(s) skipped') #prints what it found
                 
-                #Error no file found. 
-                assert len(files) > 0, "No file(s) found for {}".format(
-                    str(Path(mainf) / subfolder / fpatter)
-                )
+                # Error if no files are found, lists if files were skipped
+                assert len(files) > 0, f"No file(s) found for {str(Path(mainf) / subfolder / fpatter)}, {len(allFiles)-len(files)} files skipped"
+                
+                # Prints confirmation of number of files found and skipped. 
+                print(f'{len(files)} files found, {len(allFiles)-len(files)} file(s) skipped')
+
                 metadata = {}
 
+                # If true, ensures only one file is found
                 if single_file_match:
                     assert len(files) == 1, "Multiple files found for {}.".format(
                         str(Path(mainf) / subfolder / fpatter)
@@ -161,7 +168,7 @@ class isx_files_handler:
                 else:
                     files = [r for r in files if r not in meta["rec_paths"]]
                 
-                # Initialize ipywidgets progress bar
+                # Initializes progress bar
                 pb = progress_bar(len(files), 'Loading')
                                 
                 for file in files:
@@ -1799,7 +1806,7 @@ def parameters_for_isx(
 
 
 def progress_bar(end_amount, description_step):
-    # Initialize ipywidgets progress bar
+    # Initialize progress bar
     progress_bar = IntProgress(
         value=0, 
         min=0,
@@ -1812,7 +1819,7 @@ def progress_bar(end_amount, description_step):
         layout=Layout(width='45%')
         )
             
-    # Display the progress bar with descriptions
+    # Display the progress bar
     display(progress_bar)
     return progress_bar
 
