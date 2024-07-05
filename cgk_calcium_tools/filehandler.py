@@ -390,6 +390,14 @@ class isx_files_handler:
             With the outputs file path
 
         """
+        
+        local_processing_steps = self.processing_steps
+        
+        if "DFF" in local_processing_steps:
+            local_processing_steps.remove("DFF")
+        if "PM" in local_processing_steps:
+            local_processing_steps.remove("PM")
+        
         if op is None:
             op = self.processing_steps[-1]
         assert (
@@ -457,6 +465,12 @@ class isx_files_handler:
             output paths
 
         """
+        local_processing_steps = self.processing_steps
+
+        if "DFF" in local_processing_steps:
+            local_processing_steps.remove("DFF")
+        if "PM" in local_processing_steps:
+            local_processing_steps.remove("PM")
         if op is not None:
             opi = self.processing_steps.index(op)
             steps = self.processing_steps[: (opi + 1)]
@@ -507,10 +521,13 @@ class isx_files_handler:
         """
         if op == 'DI':
             paths = self.deinterleave_output_files
+        elif op == "DFF":
+            paths = self.get_results_filenames("dff", op=None)
+        elif op == "PM":
+            paths = self.get_results_filenames("maxdff", op=None)
         else:
             paths = self.get_filenames(op)
         
-        print(paths)
         for path in paths:
             if os.path.exists(path):
                 os.remove(path)
@@ -518,6 +535,7 @@ class isx_files_handler:
                 json_file = json_filename(path)
                 if os.path.exists(json_file):
                     os.remove(json_file)
+        print(f"{len(paths)} Files removed!")
 
     def run_step(
         self,
@@ -618,7 +636,7 @@ class isx_files_handler:
         if op.startswith("MC"):
             print("Applying motion correction, Please wait...")
             motion_correct_step(
-                translation_files, crop_rect_files, parameters, amount_of_files, pairlist, verbose)
+                translation_files, crop_rect_files, parameters, pairlist, amount_of_files, verbose)
         if op.startswith("TR"):
             print("Trim movies, Please wait...")
             trim_movie(pairlist, parameters, amount_of_files, verbose)
@@ -1381,7 +1399,7 @@ def spatial_filter_step(
     """
     
     # Initialize progress bar
-    pb = progress_bar(amount_of_files, 'Applying bandpass filter to')
+    pb = progress_bar(amount_of_files, 'Applying Bandpass Filter to')
 
     for input, output in pairlist:
         parameters.update(
@@ -1874,4 +1892,4 @@ def update_progress_bar(progress_bar, description_step):
     if progress_bar.value == progress_bar.max:
         progress_bar.description = f'{description_step} Movies: {progress_bar.value}/{progress_bar.max} Complete!'
     else:
-        progress_bar.description = f'{description_step} Movies: {progress_bar.value}/{progress_bar.max} movie(s) loaded'
+        progress_bar.description = f'{description_step} Movies: {progress_bar.value}/{progress_bar.max} movie(s)'
