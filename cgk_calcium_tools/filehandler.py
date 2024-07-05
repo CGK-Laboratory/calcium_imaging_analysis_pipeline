@@ -1494,7 +1494,7 @@ def motion_correct_step(
 
 
 def trim_movie(
-    pairlist: Tuple[list, list], amount_of_files: int, user_parameters: dict, verbose: bool = False
+    pairlist: Tuple[list, list], user_parameters: dict, amount_of_files: int,  verbose: bool = False
 ) -> None:
     """
     After verifying that the user_parameters are correct and obtaining the maximum file frame,
