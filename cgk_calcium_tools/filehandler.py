@@ -373,8 +373,7 @@ class isx_files_handler:
             outputs.append(str(Path(ofolder, Path(file).stem + suffix_out)))
             if suffix_in is not None:
                 inputs.append(str(Path(ofolder, Path(file).stem + suffix_in)))
-
-        return zip(inputs, outputs)
+        return len(inputs), zip(inputs, outputs)
 
     def get_filenames(self, op: Union[None, str] = None) -> list:
         """
@@ -547,13 +546,13 @@ class isx_files_handler:
         """
 
         if pairlist is None:
-            if op != "DI":
-                pairlist = self.get_pair_filenames(op)
             if op == "MC":
                 translation_files = self.get_results_filenames(
                     "translations.csv", op=op
                 )
                 crop_rect_files = self.get_results_filenames("crop_rect.csv", op=op)
+            if op != "DI":
+                amount_of_files, pairlist = self.get_pair_filenames(op)
         elif op == "MC":
             translation_files = [
                 os.path.splitext(p[1])[0] + "-translations.csv" for p in pairlist
@@ -591,7 +590,7 @@ class isx_files_handler:
             for finput, _ in self.get_pair_filenames(op):
                 assert os.path.exists(
                     finput
-                ), f"""File {finput} not exist:
+                ), f"""File f{input} not exist:
                     Run .de_interleave() to De-interleave multiplane movies"""
         '''
 
@@ -600,18 +599,18 @@ class isx_files_handler:
             self.deinterleave_output_files = de_interleave(focus_files = self.focus_files, efocus = self.efocus)
         if op.startswith("PP"):
             print("Preprocessing movies, please wait...")
-            preprocess_step(pairlist, parameters, verbose)
+            preprocess_step(pairlist, parameters, verbose, amount_of_files)
         if op.startswith("BP"):
             print("Applying bandpass filter, please wait...")
-            spatial_filter_step(pairlist, parameters, verbose)
+            spatial_filter_step(pairlist, parameters, verbose, amount_of_files)
         if op.startswith("MC"):
             print("Applying motion correction. Please wait...")
             motion_correct_step(
-                translation_files, crop_rect_files, parameters, pairlist, verbose
+                translation_files, crop_rect_files, parameters, pairlist, verbose, amount_of_files
             )
         if op.startswith("TR"):
             print("Trim movies...")
-            trim_movie(pairlist, parameters, verbose)
+            trim_movie(pairlist, parameters, verbose, amount_of_files)
 
         print("done")
 
@@ -1491,6 +1490,7 @@ def motion_correct_step(
     parameters: dict,
     pairlist: Tuple[list, list],
     verbose=False,
+    amount_of_files: int = 0
 ) -> None:
     """
     After checks, use the isx.motion_correct function, which motion correct movies to a reference frame.
@@ -1519,7 +1519,7 @@ def motion_correct_step(
     --------
     """
     # Initialize progress bar
-    pb = progress_bar(len(list(pairlist)), 'Applying Motion Correction to')
+    pb = progress_bar(amount_of_files, 'Applying Motion Correction to')
     for i, (input, output) in enumerate(pairlist):
         new_data = {
             "input_movie_files": os.path.basename(input),
@@ -1561,7 +1561,7 @@ def motion_correct_step(
 
 
 def preprocess_step(
-    pairlist: Tuple[list, list], parameters: dict, verbose: bool = False
+    pairlist: Tuple[list, list], parameters: dict, verbose: bool = False, amount_of_files: int = 0
 ) -> None:
     """
     After performing checks, use the isx.preprocess function, which preprocesses movies,
@@ -1583,7 +1583,7 @@ def preprocess_step(
     """
     
     # Initialize progress bar
-    pb = progress_bar(len(list(pairlist)), 'Preprocessing')
+    pb = progress_bar(amount_of_files, 'Preprocessing')
     
     for input, output in pairlist:
         if isinstance(parameters["spatial_downsample_factor"], str):
@@ -1640,7 +1640,7 @@ def preprocess_step(
 
 
 def spatial_filter_step(
-    pairlist: Tuple[list, list], parameters: dict, verbose: bool = False
+    pairlist: Tuple[list, list], parameters: dict, verbose: bool = False, amount_of_files: int = 0
 ) -> None:
     """
     After performing checks, use the isx.spatial_filter function, which
@@ -1662,7 +1662,7 @@ def spatial_filter_step(
     """
     
     # Initialize progress bar
-    pb = progress_bar(len(list(pairlist)), 'Applying bandpass filter to')
+    pb = progress_bar(amount_of_files, 'Applying bandpass filter to')
 
     for input, output in pairlist:
         parameters.update(
@@ -1699,7 +1699,7 @@ def spatial_filter_step(
 
 
 def trim_movie(
-    pairlist: Tuple[list, list], user_parameters: dict, verbose: bool = False
+    pairlist: Tuple[list, list], user_parameters: dict, verbose: bool = False, amount_of_files: int = 0
 ) -> None:
     """
     After verifying that the user_parameters are correct and obtaining the maximum file frame,
@@ -1725,7 +1725,7 @@ def trim_movie(
     ), "Trim movie requires parameter video len"
     
     # Initialize progress bar
-    pb = progress_bar(len(list(pairlist)), 'Trimming')
+    pb = progress_bar(amount_of_files, 'Trimming')
     
     for input, output in pairlist:
         parameters = {
