@@ -18,12 +18,26 @@ from .files_io import (
 )
 from ipywidgets import IntProgress, Layout
 from IPython.display import display
+from time import perf_counter
+from datetime import timedelta
 
 
 def ifstr2list(x) -> list:
     if isinstance(x, list):
         return x
     return [x]
+
+
+def timer(method):
+    def timed(self, *args, **kwargs):
+        start_time = perf_counter()
+        result = method(self, *args, **kwargs)
+        end_time = perf_counter()
+        elapsed_time = end_time - start_time
+        print(f'{method.__name__} executed in {timedelta(seconds=elapsed_time)}')
+        self.total_time += elapsed_time
+        return result
+    return timed
 
 
 class isx_files_handler:
@@ -64,6 +78,9 @@ class isx_files_handler:
         String pattern to ignore certain files. Case-sensitive. Default is None
     """
     
+    total_time = 0
+
+    @timer
     def __init__(
         self,
         main_data_folder: Union[str, list] = ".",
@@ -503,6 +520,7 @@ class isx_files_handler:
                 )
         return outputs
 
+    @timer
     def remove_output_files(self, op, keep_json: bool = True) -> None:
         """
         This function remove output files
@@ -537,6 +555,7 @@ class isx_files_handler:
                     os.remove(json_file)
         print(f"{len(paths)} Files removed!")
 
+    @timer
     def run_step(
         self,
         op: str,
@@ -648,6 +667,7 @@ class isx_files_handler:
             project_movie(pairlist, parameters, amount_of_files, overwrite, verbose)
         print("done")
 
+    @timer
     def extract_cells(
         self,
         alg: str,
@@ -1219,6 +1239,9 @@ class isx_files_handler:
 
                 self._recompute_from_log(json_file)
         print("done")
+
+    def get_total_time(cls):
+        print(f'Current total execution time {timedelta(seconds=cls.total_time)}')
 
 
 def de_interleave(focus_files: dict, efocus: list, overwrite: bool = False) -> None:
