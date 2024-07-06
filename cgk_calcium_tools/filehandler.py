@@ -16,8 +16,7 @@ from .files_io import (
     same_json_or_remove,
     json_filename,
 )
-from ipywidgets import IntProgress, Layout
-from IPython.display import display
+from .jupyter_outputs import progress_bar
 from time import perf_counter
 from datetime import timedelta
 
@@ -302,7 +301,8 @@ class isx_files_handler:
                     )
 
                     # Update progress bar
-                    update_progress_bar(pb, "Loading")
+                    pb.update_progress_bar(1)
+                    
                 
                 # Save metadata to JSON files
                 for raw_path, intern_data in metadata.items():
@@ -1313,7 +1313,7 @@ def de_interleave(focus_files: dict, efocus: list, overwrite: bool = False) -> N
                 )
 
             # Update progress bar
-            update_progress_bar(pb, "Deinterleaving")
+            pb.update_progress_bar(1)
         
         #Need to return value to save the output values back in the object for the remove function later used.
         return planes_fs
@@ -1396,7 +1396,7 @@ def preprocess_step(
         if verbose:
             print("{} preprocessing completed. {} frames fixed.".format(output, nfixed))
         # Update progress bar
-        update_progress_bar(pb, "Preprocessing")
+        pb.update_progress_bar(1)
 
 
 def spatial_filter_step(
@@ -1455,7 +1455,7 @@ def spatial_filter_step(
         if verbose:
             print("{} bandpass filtering completed".format(output))
         # Update progress bar
-        update_progress_bar(pb, "Applying bandpass filter to")
+        pb.update_progress_bar(1)
 
 
 def motion_correct_step(
@@ -1531,7 +1531,7 @@ def motion_correct_step(
         if verbose:
             print("{} motion correction completed".format(output))
         # Update progress bar
-        update_progress_bar(pb, "Applying Motion Correction to")
+        pb.update_progress_bar(1)
 
 
 def trim_movie(
@@ -1600,7 +1600,7 @@ def trim_movie(
             output_file_key="output_movie_file",
         )
         # Update progress bar
-        update_progress_bar(pb, "Trimming")
+        pb.update_progress_bar(1)
 
 
 def create_dff(
@@ -1664,7 +1664,7 @@ def create_dff(
             output_file_key="output_movie_files",
         )
         # Update progress bar
-        update_progress_bar(pb, "Normalizing via DF/F0")
+        pb.update_progress_bar(1)
     print("done")
 
 
@@ -1739,7 +1739,7 @@ def project_movie(
             output_file_key="output_image_file",
         )
         # Update progress bar
-        update_progress_bar(pb, "Projecting Movies")
+        pb.update_progress_bar(1)
     print("done")
 
 
@@ -1891,28 +1891,3 @@ def parameters_for_isx(
     return copy_dict
 
 
-def progress_bar(end_amount, description_step):
-    # Initialize progress bar
-    progress_bar = IntProgress(
-        value=0, 
-        min=0,
-        max=end_amount, 
-        style={
-            'bar_color': '#3385ff',
-            'description_width': 'auto'
-            },
-        description= f'{description_step} Movies: 0/{end_amount} movie(s)',
-        layout=Layout(width='45%')
-        )
-            
-    # Display the progress bar
-    display(progress_bar)
-    return progress_bar
-
-
-def update_progress_bar(progress_bar, description_step):
-    progress_bar.value += 1
-    if progress_bar.value == progress_bar.max:
-        progress_bar.description = f'{description_step} Movies: {progress_bar.value}/{progress_bar.max} Complete!'
-    else:
-        progress_bar.description = f'{description_step} Movies: {progress_bar.value}/{progress_bar.max} movie(s)'
