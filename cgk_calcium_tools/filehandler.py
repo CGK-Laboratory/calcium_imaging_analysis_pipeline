@@ -166,7 +166,10 @@ class isx_files_handler:
                 # Grab all the files matching the input parameters 
                 allFiles = glob(str(Path(mainf) / subfolder / fpatter),  recursive=True) #grabs all the files with fpatter.
                 # Filter out files matching the skip pattern
-                files = [file for file in allFiles if skip_pattern not in Path(file).name] #filter skip_pattern files out
+                if skip_pattern is not None:
+                    files = [file for file in allFiles if skip_pattern not in Path(file).name] #filter skip_pattern files out
+                else:
+                    files = allFiles
                 
                 # Error if no files are found, lists if files were skipped
                 assert len(files) > 0, f"No file(s) found for {str(Path(mainf) / subfolder / fpatter)}, {len(allFiles)-len(files)} files skipped"
@@ -1245,79 +1248,78 @@ class isx_files_handler:
 
 
 def de_interleave(focus_files: dict, efocus: list, overwrite: bool = False) -> None:
-        """
-        This function applies the isx.de_interleave function, which de-interleaves multiplane movies
+    """
+    This function applies the isx.de_interleave function, which de-interleaves multiplane movies
 
-        Parameters
-        ----------
-        overwrite : Bool, optional
-            If True the function erases the previous information; otherwise, it appends to a list.
-            By default "False"
+    Parameters
+    ----------
+    overwrite : Bool, optional
+        If True the function erases the previous information; otherwise, it appends to a list.
+        By default "False"
 
-        Returns
-        -------
-        None
+    Returns
+    -------
+    None
 
-        """
-        
-        # Initialize progress bar
-        pb = progress_bar(len(focus_files), 'Deinterleaving')
-        
-        for (main_file, planes_fs), focus in zip(focus_files.items(), efocus):
-            if len(focus) > 1:  # has multiplane
-                existing_files = []
-                for sp_file in planes_fs:
-                    dirname = os.path.dirname(sp_file)
-                    json_file = os.path.splitext(sp_file)[0] + ".json"
-                    if os.path.exists(sp_file):
-                        if overwrite:
-                            os.remove(sp_file)
-                            if os.path.exists(json_file):
-                                os.remove(json_file)
-                        else:
-                            if same_json_or_remove(
-                                parameters={
-                                    "input_movie_files": main_file,
-                                    "output_movie_files": [
-                                        os.path.basename(p) for p in planes_fs
-                                    ],
-                                    "in_efocus_values": focus,
-                                },
-                                input_files_keys=["input_movie_files"],
-                                output=sp_file,
-                                verbose=False,
-                            ):
-                                existing_files.append(sp_file)
-                if len(existing_files) != len(planes_fs):  # has files to run
-                    for f in existing_files:  # remove existing planes
-                        os.remove(f)
-                    try:
-                        isx.de_interleave(main_file, planes_fs, focus)
+    """
+    
+    # Initialize progress bar
+    pb = progress_bar(len(focus_files), 'Deinterleaving')
+    output_files = []
+    for (main_file, planes_fs), focus in zip(focus_files.items(), efocus):
+        if len(focus) > 1:  # has multiplane
+            existing_files = []
+            for sp_file in planes_fs:
+                dirname = os.path.dirname(sp_file)
+                json_file = os.path.splitext(sp_file)[0] + ".json"
+                if os.path.exists(sp_file):
+                    if overwrite:
+                        os.remove(sp_file)
+                        if os.path.exists(json_file):
+                            os.remove(json_file)
+                    else:
+                        if same_json_or_remove(
+                            parameters={
+                                "input_movie_files": main_file,
+                                "output_movie_files": [
+                                    os.path.basename(p) for p in planes_fs
+                                ],
+                                "in_efocus_values": focus,
+                            },
+                            input_files_keys=["input_movie_files"],
+                            output=sp_file,
+                            verbose=False,
+                        ):
+                            existing_files.append(sp_file)
+            if len(existing_files) != len(planes_fs):  # has files to run
+                for f in existing_files:  # remove existing planes
+                    os.remove(f)
+                try:
+                    isx.de_interleave(main_file, planes_fs, focus)
 
-                    except Exception as err:
-                        print("Reading: ", main_file)
-                        print("Writting: ", planes_fs)
-                        raise err
+                except Exception as err:
+                    print("Reading: ", main_file)
+                    print("Writting: ", planes_fs)
+                    raise err
 
-                data = {
-                    "input_movie_files": main_file,
-                    "output_movie_files": [os.path.basename(p) for p in planes_fs],
-                    "in_efocus_values": focus,
-                }
-                # for sp_file in planes_fs:
-                write_log_file(
-                    params=data,
-                    dir_name=dirname,
-                    input_files_keys=["input_movie_files"],
-                    output_file_key="output_movie_files",
-                )
+            data = {
+                "input_movie_files": main_file,
+                "output_movie_files": [os.path.basename(p) for p in planes_fs],
+                "in_efocus_values": focus,
+            }
+            # for sp_file in planes_fs:
+            write_log_file(
+                params=data,
+                dir_name=dirname,
+                input_files_keys=["input_movie_files"],
+                output_file_key="output_movie_files",
+            )
 
-            # Update progress bar
-            pb.update_progress_bar(1)
-        
-        #Need to return value to save the output values back in the object for the remove function later used.
-        return planes_fs
-        print("done")
+        # Update progress bar
+        pb.update_progress_bar(1)
+        output_files += planes_fs
+    # Need to return value to save the output values back in the object for the remove function later used.
+    return output_files
 
 
 def preprocess_step(
