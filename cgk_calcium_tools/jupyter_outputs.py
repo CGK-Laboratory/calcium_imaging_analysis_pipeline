@@ -1,4 +1,4 @@
-from ipywidgets import IntProgress, Layout
+from ipywidgets import IntProgress, Layout, HBox, Label
 from IPython.display import display
 
 class progress_bar():
@@ -14,16 +14,19 @@ class progress_bar():
             'bar_color': '#3385ff',
             'description_width': 'auto'
             },
-        description= f'{self.step_description} Movies: 0/{end_amount} movie(s)',
-        layout=Layout(width='45%')
+        layout=Layout(width='370px')
         )
-            
+
+        self.description_label = Label(value = f'{self.step_description} Movies: 0/{end_amount} movie(s)')
+
+        self.progress_box = HBox([self.description_label, self.progress_bar])
+
         # Display the progress bar
-        display(self.progress_bar)
+        display(self.progress_box)
     
-    def update_progress_bar(self, increament):
-        self.progress_bar.value += increament
+    def update_progress_bar(self, increment):
+        self.progress_bar.value += increment
         if self.progress_bar.value == self.progress_bar.max:
-            self.progress_bar.description = f'{self.step_description} Movies: {self.progress_bar.value}/{self.progress_bar.max} Complete!'
+            self.description_label = f'{self.step_description} Movies: {self.progress_bar.value}/{self.progress_bar.max} Complete!'
         else:
-            self.progress_bar.description = f'{self.step_description} Movies: {self.progress_bar.value}/{self.progress_bar.max} movie(s)'
+            self.description_label = f'{self.step_description} Movies: {self.progress_bar.value}/{self.progress_bar.max} movie(s)'
