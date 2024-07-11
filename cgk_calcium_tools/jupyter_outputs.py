@@ -27,6 +27,6 @@ class progress_bar():
     def update_progress_bar(self, increment):
         self.progress_bar.value += increment
         if self.progress_bar.value == self.progress_bar.max:
-            self.description_label = f'{self.step_description} Movies: {self.progress_bar.value}/{self.progress_bar.max} Complete!'
+            self.description_label.value = f'{self.step_description} Movies: {self.progress_bar.value}/{self.progress_bar.max} Complete!'
         else:
-            self.description_label = f'{self.step_description} Movies: {self.progress_bar.value}/{self.progress_bar.max} movie(s)'
+            self.description_label.value = f'{self.step_description} Movies: {self.progress_bar.value}/{self.progress_bar.max} movie(s)'
