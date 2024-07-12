@@ -1916,7 +1916,7 @@ def create_inscopix_projects(fh: isx_files_handler, cellsetname="pca-ica"):
         project_file = fh.get_results_filenames(
             f"{cellsetname}.isxp", op=None, idx=idx, single_plane=False
         )[0]
-        data_folder = project_file[:-4] + "_data"
+        data_folder = project_file[:-5] + "_data"
         os.makedirs(data_folder, exist_ok=True)
         single_planes_info = []
         for dff, cellset, ev_det in zip(dffs, cellsets, evs_dets):
@@ -1927,11 +1927,11 @@ def create_inscopix_projects(fh: isx_files_handler, cellsetname="pca-ica"):
             dmax = np.max(movie_data)
             del movie
             replacements = {
-                "{eventdet_path}": ev_det,
+                "{eventdet_path}": ev_det.replace("\\","/"),
                 "{eventdet_name}": Path(ev_det).name,
-                "{cellset_path}": cellset,
+                "{cellset_path}": cellset.replace("\\","/"),
                 "{cellset_name}":  Path(cellset).name,
-                "{DFF_path}": dff,
+                "{DFF_path}": dff.replace("\\","/"),
                 "{DFF_name}": Path(dff).name,
                 "{dmax}": str(dmax),
                 "{dmin}": str(dmin)
