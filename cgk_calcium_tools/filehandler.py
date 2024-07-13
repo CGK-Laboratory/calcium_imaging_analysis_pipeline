@@ -737,6 +737,8 @@ class isx_files_handler:
                     if os.path.exists(json_file):
                         os.remove(json_file)
 
+        pb = progress_bar(len(inputs_files), 'Extracting Cells')
+
         for input, output in zip(inputs_files, cellsets):
             new_data = {
                 "input_movie_files": os.path.basename(input),
@@ -779,8 +781,9 @@ class isx_files_handler:
                 input_files_keys=["input_movie_files"],
                 output_file_key="output_cell_set_files",
             )
+            pb.update_progress_bar(1)
         if verbose:
-            print("Cell extraccion, done")
+            print("Cell extraction, done")
         # detect events
         ed_parameters = self.default_parameters["event_detection"].copy()
         if detection_params is not None:
@@ -788,6 +791,7 @@ class isx_files_handler:
                 assert key in ed_parameters, f"The parameter: {key} does not exist"
                 ed_parameters[key] = value
 
+        pb = progress_bar(len(cellsets), "Detecting Events")
         for input, output in zip(
             cellsets, self.get_results_filenames(f"{cellsetname}-ED", op=None)
         ):
@@ -831,7 +835,7 @@ class isx_files_handler:
                 input_files_keys=["input_cell_set_files"],
                 output_file_key="output_event_set_files",
             )
-
+            pb.update_progress_bar(1)
         if verbose:
             print("Event detection, done")
 
@@ -842,6 +846,7 @@ class isx_files_handler:
                 assert key in ar_parameters, f"The parameter: {key} does not exist"
                 ar_parameters[key] = value
 
+        pb = progress_bar(len(cellsets), "Accepting/Rejecting Cells")
         for input_cs, input_ev, config_json in zip(
             cellsets,
             self.get_results_filenames(f"{cellsetname}-ED", op=None),
@@ -876,9 +881,11 @@ class isx_files_handler:
                 input_files_keys=["input_cell_set_files", "input_event_set_files"],
                 output_file_key="config_json",
             )
+            pb.update_progress_bar(1)
         if verbose:
             print("accept reject cells, done")
 
+    @timer
     def run_multiplate_registration(
         self,
         overwrite: bool = False,
