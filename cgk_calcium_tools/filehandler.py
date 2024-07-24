@@ -949,8 +949,9 @@ class isx_files_handler:
                 f"{cellsetname}-accept_reject", op=None, idx=idx, single_plane=False
             )[0]
 
+            input_cell_set_file_names = [os.path.basename(file) for file in input_cell_set_files]
             new_data = {
-                "input_cell_set_files": os.path.basename(input_cell_set_files),
+                "input_cell_set_files": input_cell_set_file_names,
                 "output_cell_set_file": os.path.basename(output_cell_set_file),
                 "auto_accept_reject": os.path.basename(ar_cell_set_file),
             }
@@ -967,15 +968,11 @@ class isx_files_handler:
                     cs = isx.CellSet.read(i)
                     n_input = cs.num_cells
                     accepted = 0
-                    if (
-                        "accepted_cells_only" in mpr_parameters
-                        and mpr_parameters["accepted_cells_only"] is True
-                    ):
-                        for n in range(n_input):
+                    
+                    for n in range(n_input):
                             if cs.get_cell_status(n) == "accepted":
                                 accepted += 1
-                    else:
-                        accepted = n_input
+                                
                     if accepted != 0:
                         input.append(i)
                     cs.flush()
@@ -1006,8 +1003,7 @@ class isx_files_handler:
                             ["comments", "auto_accept_reject"],
                             {
                                 "input_cell_set_files": input,
-                                "output_cell_set_file": output_cell_set_file,
-                                "auto_accept_reject": ar_cell_set_file,
+                                "output_cell_set_file": output_cell_set_file
                             },
                         )
                     )
