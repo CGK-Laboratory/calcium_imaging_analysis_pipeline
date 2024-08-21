@@ -930,6 +930,8 @@ class isx_files_handler:
                 assert key in mpr_parameters, f"The parameter: {key} does not exist"
                 mpr_parameters[key] = value
 
+        self.output_file_paths = []
+        pb = progress_bar(len(self.focus_files.keys()), 'Running Multiplane Registration to')
         for main_file, single_planes in self.focus_files.items():
             if len(single_planes) == 1:  # doesn't have multiplane
                 continue
@@ -1084,8 +1086,14 @@ class isx_files_handler:
                 input_files_keys=["input_cell_set_files", "input_event_set_files"],
                 output_file_key="config_json",
             )
+            self.output_file_paths.append(output_cell_set_file)
+            pb.update_progress_bar(increment=1)
         print("done")
 
+    def deconvolve_cellset():
+        #isx.deconvolve_cellset()
+        pass
+    
     def cell_metrics(self, cellsetname: str, verbose=False) -> pd.DataFrame:
         """
         This function use the isx.cell_metrics function, which compute cell metrics
