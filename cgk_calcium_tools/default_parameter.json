@@ -55,9 +55,10 @@
         "ica_temporal_weight":0,
         "max_iterations":1000,
         "convergence_threshold":1e-05,
-        "block_size":1000,
+        "block_size":8000,
         "auto_estimate_num_ics":false, 
-        "average_cell_diameter":13
+        "average_cell_diameter":13,
+        "comments": "Change block_size to use more/less ram"
     },
     "event_detection": {
         "threshold":6,
