@@ -1196,7 +1196,7 @@ class isx_files_handler:
         input = os.path.join(os.path.dirname(json_file), data[input_key])
 
         if not os.path.exists(input):
-            self._re_compute_from_log(
+            self._recompute_from_log(
                 os.path.join(
                     os.path.dirname(json_file), os.path.splitext(input)[0] + ".json"
                 )
