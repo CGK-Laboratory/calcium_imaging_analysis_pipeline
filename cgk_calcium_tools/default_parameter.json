@@ -26,6 +26,16 @@
         "output_crop_rect_file":null,
         "preserve_input_dimensions":false
     },
+    "deconvolution": {
+        "accepted_only":true,
+        "spike_snr_threshold":3, 
+        "noise_range":[0.25,0.5], 
+        "noise_method":"mean",
+        "first_order_ar":true, 
+        "lags":5, 
+        "fudge_factor": 0.96,
+        "deconvolution_method":"oasis"
+    },
     "trim": {
         "video_len": 900
     },
