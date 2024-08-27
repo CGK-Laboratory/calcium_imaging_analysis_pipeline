@@ -1,9 +1,7 @@
 import os
 import json
 import isx
-import numpy as np
 from datetime import datetime
-from pathlib import Path
 
 
 def same_json_or_remove(

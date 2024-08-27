@@ -1089,11 +1089,7 @@ class isx_files_handler:
             self.output_file_paths.append(output_cell_set_file)
             pb.update_progress_bar(increment=1)
         print("done")
-
-    def deconvolve_cellset():
-        #isx.deconvolve_cellset()
-        pass
-    
+  
     def cell_metrics(self, cellsetname: str, verbose=False) -> pd.DataFrame:
         """
         This function use the isx.cell_metrics function, which compute cell metrics
@@ -1178,6 +1174,100 @@ class isx_files_handler:
             df.append(aux)
 
         return pd.concat(df)
+
+
+    def run_deconvolution(
+        self,
+        overwrite: bool = False,
+        verbose: bool = False,
+        params: Union[dict, None] = None,
+        cellsetname: Union[str, None] = None,
+    ) -> None:
+        """
+        This function runs the deconvolution step, save the new cellsets with the updated traces,
+        and the new event detecction 
+
+        Parameters
+        ----------
+        cellsetname : str
+            Cellset name used, usually: 'cnmfe' or 'pca-ica'
+        overwrite : bool, optional
+            Force compute everything again, by default False
+        verbose : bool, optional
+            Show additional messages, by default False
+        params : Union[dict,None], optional
+            Parameters for deconvolution, by default None
+
+        Returns
+        -------
+        None
+
+        """
+        parameters = self.default_parameters["deconvolution"].copy()
+
+        if params is not None:
+            for key, value in params.items():
+                assert key in parameters, f"The parameter: {key} does not exist"
+                parameters[key] = value
+
+        self.output_file_paths = []
+        pb = progress_bar(len(self.focus_files.keys()), 'Running Deconvolution Registration to')
+        for main_file, single_planes in self.focus_files.items():
+            
+            input_cell_set_files = self.get_results_filenames(
+                f"{cellsetname}",
+                op=None,
+                idx=[self.p_rec_paths.index(f) for f in single_planes],
+            )
+            idx = [self.rec_paths.index(main_file)]
+            denoise_file = self.get_results_filenames(
+                f"{cellsetname}-DNI", op=None, idx=idx, single_plane=False
+            )[0]
+
+            ed_file = self.get_results_filenames(
+                f"{cellsetname}-SPI", op=None, idx=idx, single_plane=False
+            )[0]
+
+            if overwrite:
+                remove_file_and_json(denoise_file)
+                remove_file_and_json(ed_file)
+            input_cell_set_file_names = [os.path.basename(file) for file in input_cell_set_files]
+            new_data = {
+                "input_raw_cellset_files": os.path.basename(input_cell_set_file_names),
+                "output_denoised_cellset_files": os.path.basename(denoise_file),
+                "output_spike_eventset_files": os.path.basename(ed_file),
+            }
+            parameters.update(new_data)
+
+            if not same_json_or_remove(
+                parameters,
+                output=denoise_file,
+                verbose=verbose,
+                input_files_keys=["input_raw_cellset_files"],
+            ):
+                isx.deconvolve_cellset(
+                        **parameters_for_isx(
+                            parameters,
+                            ["comments", "auto_accept_reject"],
+                            {
+                                "input_raw_cellset_files": input_cell_set_file_names,
+                                "output_denoised_cellset_files": denoise_file,
+                                "output_spike_eventset_files": ed_file,
+                            },
+                        )
+                    )
+
+                for ofile,outkey in ((denoise_file,"output_denoised_cellset_files"),(ed_file,"output_spike_eventset_files")):
+                    write_log_file(
+                        parameters,
+                        os.path.dirname(ofile),
+                        {"function": "deconvolve_cellset"},
+                        input_files_keys=["input_cell_set_files"],
+                        output_file_key=outkey,
+                    )
+               
+            pb.update_progress_bar(increment=1)
+        print("done")
 
     def _recompute_from_log(self, json_file: str) -> None:
         if not os.path.exists(json_file):
@@ -1471,6 +1561,8 @@ def spatial_filter_step(
         pb.update_progress_bar(1)
 
 
+
+
 def motion_correct_step(
     translation_files: list,
     crop_rect_files: list,
@@ -1545,7 +1637,6 @@ def motion_correct_step(
             print("{} motion correction completed".format(output))
         # Update progress bar
         pb.update_progress_bar(1)
-
 
 def trim_movie(
     pairlist: Tuple[list, list], user_parameters: dict, amount_of_files: int,  verbose: bool = False
@@ -1902,60 +1993,3 @@ def parameters_for_isx(
             del copy_dict[key]
     copy_dict.update(to_update)
     return copy_dict
-
-
-def create_inscopix_projects(fh: isx_files_handler, cellsetname="pca-ica"):
-
-    src_dir = os.path.dirname(os.path.abspath(__file__))
-    with open(
-        os.path.join(src_dir, "prj_template.json"), "r", encoding="utf-8"
-    ) as file:
-        prj_template = file.read()
-    with open(
-        os.path.join(src_dir, "single_plane_template.json"), "r", encoding="utf-8"
-    ) as file:
-        single_plane_template = file.read()
-
-    for main_file, single_planes in fh.focus_files.items():
-        idxs = [fh.p_rec_paths.index(f) for f in single_planes]
-        cellsets = fh.get_results_filenames(f"{cellsetname}", op=None, idx=idxs)
-        evs_dets = fh.get_results_filenames(f"{cellsetname}-ED", op=None, idx=idxs)
-        dffs = fh.get_results_filenames("dff", op="MC", idx=idxs)
-
-        idx = [fh.rec_paths.index(main_file)]
-
-        project_file = fh.get_results_filenames(
-            f"{cellsetname}.isxp", op=None, idx=idx, single_plane=False
-        )[0]
-        data_folder = project_file[:-5] + "_data"
-        os.makedirs(data_folder, exist_ok=True)
-        single_planes_info = []
-        for dff, cellset, ev_det in zip(dffs, cellsets, evs_dets):
-            parsed_plane = single_plane_template
-            movie = isx.Movie.read(dff)
-            movie_data = movie.get_frame_data(0)
-            dmin = np.min(movie_data)
-            dmax = np.max(movie_data)
-            del movie
-            replacements = {
-                "{eventdet_path}": ev_det.replace("\\","/"),
-                "{eventdet_name}": Path(ev_det).name,
-                "{cellset_path}": cellset.replace("\\","/"),
-                "{cellset_name}":  Path(cellset).name,
-                "{DFF_path}": dff.replace("\\","/"),
-                "{DFF_name}": Path(dff).name,
-                "{dmax}": str(dmax),
-                "{dmin}": str(dmin)
-            }
-            
-            for key, value in replacements.items():
-                parsed_plane = parsed_plane.replace(key, value)
-
-            single_planes_info.append(parsed_plane)
-
-        prj_text = prj_template.replace(
-            "{prj_name}", Path(project_file).name
-        ).replace("{plane_1ist}", ", ".join(single_planes_info))
-        with open(project_file, "wt") as file:
-            file.write(prj_text)
-
