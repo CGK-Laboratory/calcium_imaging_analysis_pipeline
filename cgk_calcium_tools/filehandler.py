@@ -1211,29 +1211,24 @@ class isx_files_handler:
                 parameters[key] = value
 
         self.output_file_paths = []
-        pb = progress_bar(len(self.focus_files.keys()), 'Running Deconvolution Registration to')
-        for main_file, single_planes in self.focus_files.items():
+        cell_sets = self.get_results_filenames(
+            f"{cellsetname}", op=None, single_plane=False
+        )
+        denoise_files = self.get_results_filenames(
+                f"{cellsetname}-DNI", op=None,single_plane=False
+        )
+        ed_files = self.get_results_filenames(
+                f"{cellsetname}-SPI", op=None, single_plane=False
+        )
+        pb = progress_bar(len(cell_sets), 'Running Deconvolution Registration to')
+        
+        for cellset,denoise_file,ed_file in zip(cell_sets,denoise_files,ed_files):
             
-            input_cell_set_files = self.get_results_filenames(
-                f"{cellsetname}",
-                op=None,
-                idx=[self.p_rec_paths.index(f) for f in single_planes],
-            )
-            idx = [self.rec_paths.index(main_file)]
-            denoise_file = self.get_results_filenames(
-                f"{cellsetname}-DNI", op=None, idx=idx, single_plane=False
-            )[0]
-
-            ed_file = self.get_results_filenames(
-                f"{cellsetname}-SPI", op=None, idx=idx, single_plane=False
-            )[0]
-
             if overwrite:
                 remove_file_and_json(denoise_file)
                 remove_file_and_json(ed_file)
-            input_cell_set_file_names = [os.path.basename(file) for file in input_cell_set_files]
             new_data = {
-                "input_raw_cellset_files": os.path.basename(input_cell_set_file_names),
+                "input_raw_cellset_files": os.path.basename(cellset),
                 "output_denoised_cellset_files": os.path.basename(denoise_file),
                 "output_spike_eventset_files": os.path.basename(ed_file),
             }
@@ -1248,9 +1243,9 @@ class isx_files_handler:
                 isx.deconvolve_cellset(
                         **parameters_for_isx(
                             parameters,
-                            ["comments", "auto_accept_reject"],
+                            ["comments"],
                             {
-                                "input_raw_cellset_files": input_cell_set_file_names,
+                                "input_raw_cellset_files": cellset,
                                 "output_denoised_cellset_files": denoise_file,
                                 "output_spike_eventset_files": ed_file,
                             },
@@ -1262,7 +1257,7 @@ class isx_files_handler:
                         parameters,
                         os.path.dirname(ofile),
                         {"function": "deconvolve_cellset"},
-                        input_files_keys=["input_cell_set_files"],
+                        input_files_keys=["input_raw_cellset_files"],
                         output_file_key=outkey,
                     )
                
