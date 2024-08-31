@@ -19,6 +19,7 @@ from .files_io import (
 from .jupyter_outputs import progress_bar
 from time import perf_counter
 from datetime import timedelta
+from isx_aux_functions import cellset_is_empty
 
 
 def ifstr2list(x) -> list:
@@ -965,21 +966,12 @@ class isx_files_handler:
                 verbose=verbose,
                 input_files_keys=["input_cell_set_files", "auto_accept_reject"],
             ):
-                input = []
+                input_cellsets = []
                 for i in input_cell_set_files:
-                    cs = isx.CellSet.read(i)
-                    n_input = cs.num_cells
-                    accepted = 0
-                    
-                    for n in range(n_input):
-                            if cs.get_cell_status(n) == "accepted":
-                                accepted += 1
-                                
-                    if accepted != 0:
-                        input.append(i)
-                    cs.flush()
-                    del cs  # isx keeps the file open otherwise
-                if len(input) == 0:
+                    if not cellset_is_empty(i):
+                        input_cellsets.append(i)
+
+                if len(input_cellsets) == 0:
                     print(
                         f"Warning: File: {output_cell_set_file} not generated.\n"
                         + "Empty cellmap created in its place"
@@ -996,15 +988,15 @@ class isx_files_handler:
                     cell_set.flush()
                     del cell_set
                     del cell_set_plane  # isx keeps the file open otherwise
-                elif len(input) == 1:
-                    shutil.copyfile(input[0], output_cell_set_file)
+                elif len(input_cellsets) == 1:
+                    shutil.copyfile(input_cellsets[0], output_cell_set_file)
                 else:
                     isx.multiplane_registration(
                         **parameters_for_isx(
                             mpr_parameters,
                             ["comments", "auto_accept_reject"],
                             {
-                                "input_cell_set_files": input,
+                                "input_cell_set_files": input_cellsets,
                                 "output_cell_set_file": output_cell_set_file
                             },
                         )
