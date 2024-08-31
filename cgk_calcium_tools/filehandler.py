@@ -19,7 +19,11 @@ from .files_io import (
 from .jupyter_outputs import progress_bar
 from time import perf_counter
 from datetime import timedelta
-from isx_aux_functions import cellset_is_empty
+from isx_aux_functions import (
+    cellset_is_empty,
+    create_empty_cellset,
+    create_empty_events,
+)
 
 
 def ifstr2list(x) -> list:
@@ -976,18 +980,9 @@ class isx_files_handler:
                         f"Warning: File: {output_cell_set_file} not generated.\n"
                         + "Empty cellmap created in its place"
                     )
-                    cell_set_plane = isx.CellSet.read(input_cell_set_files[0])
-                    cell_set = isx.CellSet.write(
-                        output_cell_set_file,
-                        cell_set_plane.timing,
-                        cell_set_plane.spacing,
-                    )
-                    image_null = np.zeros(cell_set.spacing.num_pixels, dtype=np.float32)
-                    trace_null = np.zeros(cell_set.timing.num_samples, dtype=np.float32)
-                    cell_set.set_cell_data(0, image_null, trace_null, "")
-                    cell_set.flush()
-                    del cell_set
-                    del cell_set_plane  # isx keeps the file open otherwise
+                    create_empty_cellset(input_file=input_cell_set_files[0],
+                                           output_cell_set_file=output_cell_set_file)
+
                 elif len(input_cellsets) == 1:
                     shutil.copyfile(input_cellsets[0], output_cell_set_file)
                 else:
@@ -1038,11 +1033,7 @@ class isx_files_handler:
                         f"Warning: Event_detection, failed to create file: {ed_file}.\n"
                         + "Empty file created with its place"
                     )
-                    cell_set = isx.CellSet.read(output_cell_set_file)
-                    evset = isx.EventSet.write(ed_file, cell_set.timing, [""])
-                    evset.flush()
-                    del evset
-                    del cell_set
+                    create_empty_events(output_cell_set_file,ed_file)
 
                 write_log_file(
                     ed_parameters,
