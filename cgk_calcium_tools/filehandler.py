@@ -1223,17 +1223,21 @@ class isx_files_handler:
                 verbose=verbose,
                 input_files_keys=["input_raw_cellset_files"],
             ):
-                isx.deconvolve_cellset(
-                        **parameters_for_isx(
-                            parameters,
-                            ["comments"],
-                            {
-                                "input_raw_cellset_files": cellset,
-                                "output_denoised_cellset_files": denoise_file,
-                                "output_spike_eventset_files": ed_file,
-                            },
+                if cellset_is_empty(cellset, accepted_only=parameters['accepted_only']):
+                    create_empty_events(cellset,ed_file)
+                    create_empty_cellset(cellset,denoise_file)
+                else:
+                    isx.deconvolve_cellset(
+                            **parameters_for_isx(
+                                parameters,
+                                ["comments"],
+                                {
+                                    "input_raw_cellset_files": cellset,
+                                    "output_denoised_cellset_files": denoise_file,
+                                    "output_spike_eventset_files": ed_file,
+                                },
+                            )
                         )
-                    )
 
                 for ofile,outkey in ((denoise_file,"output_denoised_cellset_files"),(ed_file,"output_spike_eventset_files")):
                     write_log_file(
