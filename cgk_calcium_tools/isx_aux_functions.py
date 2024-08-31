@@ -16,7 +16,7 @@ def create_empty_events(cell_set_file,ed_file):
     cell_set = isx.CellSet.read(cell_set_file)
     evset = isx.EventSet.write(ed_file, cell_set.timing, [""])
     evset.flush()
-
+    del evset  # isx keeps the file open otherwise
 
 def create_empty_cellset(input_file: str, output_cell_set_file: str):
     """
@@ -39,7 +39,7 @@ def create_empty_cellset(input_file: str, output_cell_set_file: str):
     trace_null = np.zeros(cell_set.timing.num_samples, dtype=np.float32)
     cell_set.set_cell_data(0, image_null, trace_null, "")
     cell_set.flush()
-
+    del cell_set  # isx keeps the file open otherwise
 
 def cellset_is_empty(cellset: str, accepted_only:bool = True):
     """
@@ -53,13 +53,15 @@ def cellset_is_empty(cellset: str, accepted_only:bool = True):
         bool: True if the cellset is empty, False otherwise.
     """
     cs = isx.CellSet.read(cellset)
-    n_input = cs.num_cells
     is_empty = True
     
-    for n in range(n_input):
-        if not accepted_only or cs.get_cell_status(n) == "accepted":
-            is_empty = False
-            break
+    if not accepted_only:
+        is_empty = cs.num_cells == 0
+    else:
+        for n in range(cs.num_cells):
+            if cs.get_cell_status(n) == "accepted":
+                is_empty = False
+                break
                 
     cs.flush()
     del cs  # isx keeps the file open otherwise
