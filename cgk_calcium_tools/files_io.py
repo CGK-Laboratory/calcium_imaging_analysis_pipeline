@@ -3,6 +3,32 @@ import json
 import isx
 from datetime import datetime
 
+def parameters_for_isx(
+    d: dict, keys_to_remove: list = [], to_update: dict = {}
+) -> dict:
+    """
+    Creates a copy of a dictionary while removing references to specific keys
+
+    Parameters
+    ----------
+    d : dict
+        Distionary to copy without a particular list
+    keys : list
+        List of keys to be excluded in the returned dictionary
+    to_update : dict
+        key to update from original dictionary
+    Returns
+    -------
+    dict
+        copy of the dictionary provided as an argument, excluding any references to the specified keys
+
+    """
+    copy_dict = d.copy()
+    for key in keys_to_remove:
+        if key in d:
+            del copy_dict[key]
+    copy_dict.update(to_update)
+    return copy_dict
 
 def same_json_or_remove(
     parameters: dict, input_files_keys: list, output: str, verbose: bool

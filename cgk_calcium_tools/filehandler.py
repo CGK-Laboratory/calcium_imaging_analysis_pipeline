@@ -8,13 +8,13 @@ import isx
 import json
 from typing import Union, Tuple, Iterable
 from .processing import fix_frames
-import pandas as pd
 import shutil
 from .files_io import (
     write_log_file,
     remove_file_and_json,
     same_json_or_remove,
     json_filename,
+    parameters_for_isx
 )
 from .jupyter_outputs import progress_bar
 from time import perf_counter
@@ -1073,92 +1073,6 @@ class isx_files_handler:
             pb.update_progress_bar(increment=1)
         print("done")
   
-    def cell_metrics(self, cellsetname: str, verbose=False) -> pd.DataFrame:
-        """
-        This function use the isx.cell_metrics function, which compute cell metrics
-        for a given cell set and events combination
-
-        Parameters
-        ----------
-        cellsetname : str
-            cell label to get filename
-        verbose : bool, optional
-            Show additional messages, by default False
-
-        Returns
-        -------
-        pd.DataFrame
-            a concatenates list with metrics
-
-
-        """
-        cell_set_files = self.get_results_filenames(
-            f"{cellsetname}", op=None, single_plane=False
-        )
-        ed_files = self.get_results_filenames(
-            f"{cellsetname}-ED", op=None, single_plane=False
-        )
-        metrics_files = self.get_results_filenames(
-            f"{cellsetname}_metrics.csv", op=None, single_plane=False
-        )
-
-        for cellset, ed, metric in zip(cell_set_files, ed_files, metrics_files):
-            inputs_args = {
-                "input_cell_set_files": os.path.basename(cellset),
-                "input_event_set_files": os.path.basename(ed),
-                "output_metrics_files": os.path.basename(metric),
-            }
-            if not same_json_or_remove(
-                inputs_args,
-                output=metric,
-                verbose=verbose,
-                input_files_keys=["input_cell_set_files", "input_event_set_files"],
-            ):
-                try:
-                    isx.cell_metrics(
-                        **parameters_for_isx(
-                            inputs_args,
-                            to_update={
-                                "input_cell_set_files": cellset,
-                                "input_event_set_files": ed,
-                                "output_metrics_files": metric,
-                            },
-                        )
-                    )
-                except Exception as e:
-                    print(e)
-                write_log_file(
-                    inputs_args,
-                    os.path.dirname(metric),
-                    {"function": "cell_metrics"},
-                    input_files_keys=["input_cell_set_files", "input_event_set_files"],
-                    output_file_key="output_metrics_files",
-                )
-
-        df = []
-        for metric_file, label, cell_set_file in zip(
-            metrics_files, self.recording_labels, cell_set_files
-        ):
-            aux = pd.read_csv(metric_file)
-            aux["Recording Label"] = label
-            cell_set = isx.CellSet.read(cell_set_file)
-            num_cells = cell_set.num_cells
-            status = pd.DataFrame.from_dict(
-                {
-                    cell: [cell_set.get_cell_name(cell), cell_set.get_cell_status(cell)]
-                    for cell in range(num_cells)
-                },
-                orient="index",
-                columns=["cellName", "status"],
-            )
-            cell_set.flush()
-            aux = aux.merge(status, on="cellName")
-
-            df.append(aux)
-
-        return pd.concat(df)
-
-
     def run_deconvolution(
         self,
         overwrite: bool = False,
@@ -1949,29 +1863,3 @@ def get_efocus(gpio_file: str) -> list:
     return [int(v) for v in video_efocus]
 
 
-def parameters_for_isx(
-    d: dict, keys_to_remove: list = [], to_update: dict = {}
-) -> dict:
-    """
-    Creates a copy of a dictionary while removing references to specific keys
-
-    Parameters
-    ----------
-    d : dict
-        Distionary to copy without a particular list
-    keys : list
-        List of keys to be excluded in the returned dictionary
-    to_update : dict
-        key to update from original dictionary
-    Returns
-    -------
-    dict
-        copy of the dictionary provided as an argument, excluding any references to the specified keys
-
-    """
-    copy_dict = d.copy()
-    for key in keys_to_remove:
-        if key in d:
-            del copy_dict[key]
-    copy_dict.update(to_update)
-    return copy_dict
