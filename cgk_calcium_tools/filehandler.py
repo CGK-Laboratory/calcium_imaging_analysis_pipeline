@@ -19,6 +19,11 @@ from .files_io import (
 from .jupyter_outputs import progress_bar
 from time import perf_counter
 from datetime import timedelta
+from isx_aux_functions import (
+    cellset_is_empty,
+    create_empty_cellset,
+    create_empty_events,
+)
 
 
 def ifstr2list(x) -> list:
@@ -965,46 +970,28 @@ class isx_files_handler:
                 verbose=verbose,
                 input_files_keys=["input_cell_set_files", "auto_accept_reject"],
             ):
-                input = []
+                input_cellsets = []
                 for i in input_cell_set_files:
-                    cs = isx.CellSet.read(i)
-                    n_input = cs.num_cells
-                    accepted = 0
-                    
-                    for n in range(n_input):
-                            if cs.get_cell_status(n) == "accepted":
-                                accepted += 1
-                                
-                    if accepted != 0:
-                        input.append(i)
-                    cs.flush()
-                    del cs  # isx keeps the file open otherwise
-                if len(input) == 0:
+                    if not cellset_is_empty(i):
+                        input_cellsets.append(i)
+
+                if len(input_cellsets) == 0:
                     print(
                         f"Warning: File: {output_cell_set_file} not generated.\n"
                         + "Empty cellmap created in its place"
                     )
-                    cell_set_plane = isx.CellSet.read(input_cell_set_files[0])
-                    cell_set = isx.CellSet.write(
-                        output_cell_set_file,
-                        cell_set_plane.timing,
-                        cell_set_plane.spacing,
-                    )
-                    image_null = np.zeros(cell_set.spacing.num_pixels, dtype=np.float32)
-                    trace_null = np.zeros(cell_set.timing.num_samples, dtype=np.float32)
-                    cell_set.set_cell_data(0, image_null, trace_null, "")
-                    cell_set.flush()
-                    del cell_set
-                    del cell_set_plane  # isx keeps the file open otherwise
-                elif len(input) == 1:
-                    shutil.copyfile(input[0], output_cell_set_file)
+                    create_empty_cellset(input_file=input_cell_set_files[0],
+                                           output_cell_set_file=output_cell_set_file)
+
+                elif len(input_cellsets) == 1:
+                    shutil.copyfile(input_cellsets[0], output_cell_set_file)
                 else:
                     isx.multiplane_registration(
                         **parameters_for_isx(
                             mpr_parameters,
                             ["comments", "auto_accept_reject"],
                             {
-                                "input_cell_set_files": input,
+                                "input_cell_set_files": input_cellsets,
                                 "output_cell_set_file": output_cell_set_file
                             },
                         )
@@ -1046,11 +1033,7 @@ class isx_files_handler:
                         f"Warning: Event_detection, failed to create file: {ed_file}.\n"
                         + "Empty file created with its place"
                     )
-                    cell_set = isx.CellSet.read(output_cell_set_file)
-                    evset = isx.EventSet.write(ed_file, cell_set.timing, [""])
-                    evset.flush()
-                    del evset
-                    del cell_set
+                    create_empty_events(output_cell_set_file,ed_file)
 
                 write_log_file(
                     ed_parameters,
@@ -1240,17 +1223,21 @@ class isx_files_handler:
                 verbose=verbose,
                 input_files_keys=["input_raw_cellset_files"],
             ):
-                isx.deconvolve_cellset(
-                        **parameters_for_isx(
-                            parameters,
-                            ["comments"],
-                            {
-                                "input_raw_cellset_files": cellset,
-                                "output_denoised_cellset_files": denoise_file,
-                                "output_spike_eventset_files": ed_file,
-                            },
+                if cellset_is_empty(cellset, accepted_only=parameters['accepted_only']):
+                    create_empty_events(cellset,ed_file)
+                    create_empty_cellset(cellset,denoise_file)
+                else:
+                    isx.deconvolve_cellset(
+                            **parameters_for_isx(
+                                parameters,
+                                ["comments"],
+                                {
+                                    "input_raw_cellset_files": cellset,
+                                    "output_denoised_cellset_files": denoise_file,
+                                    "output_spike_eventset_files": ed_file,
+                                },
+                            )
                         )
-                    )
 
                 for ofile,outkey in ((denoise_file,"output_denoised_cellset_files"),(ed_file,"output_spike_eventset_files")):
                     write_log_file(
