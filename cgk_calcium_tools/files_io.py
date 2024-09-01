@@ -3,6 +3,7 @@ import json
 import isx
 from datetime import datetime
 
+
 def parameters_for_isx(
     d: dict, keys_to_remove: list = [], to_update: dict = {}
 ) -> dict:
@@ -29,6 +30,7 @@ def parameters_for_isx(
             del copy_dict[key]
     copy_dict.update(to_update)
     return copy_dict
+
 
 def same_json_or_remove(
     parameters: dict, input_files_keys: list, output: str, verbose: bool
