@@ -1,9 +1,21 @@
 import numpy as np
 from pathlib import Path
 import os
-from filehandler import isx_files_handler
+from .filehandler import isx_files_handler
 import isx
+
+
 def create_inscopix_projects(fh: isx_files_handler, cellsetname="pca-ica"):
+    """
+    Creates an Inscopix project file (.isxp) from a given isx_files_handler object and cellset result.
+
+    Parameters:
+    fh (isx_files_handler): The isx_files_handler object containing the necessary files and information.
+    cellsetname (str, optional): The name of the cellset to use. Defaults to "pca-ica".
+
+    Returns:
+    None
+    """
 
     src_dir = os.path.dirname(os.path.abspath(__file__))
     with open(
@@ -37,23 +49,23 @@ def create_inscopix_projects(fh: isx_files_handler, cellsetname="pca-ica"):
             dmax = np.max(movie_data)
             del movie
             replacements = {
-                "{eventdet_path}": ev_det.replace("\\","/"),
+                "{eventdet_path}": ev_det.replace("\\", "/"),
                 "{eventdet_name}": Path(ev_det).name,
-                "{cellset_path}": cellset.replace("\\","/"),
-                "{cellset_name}":  Path(cellset).name,
-                "{DFF_path}": dff.replace("\\","/"),
+                "{cellset_path}": cellset.replace("\\", "/"),
+                "{cellset_name}": Path(cellset).name,
+                "{DFF_path}": dff.replace("\\", "/"),
                 "{DFF_name}": Path(dff).name,
                 "{dmax}": str(dmax),
-                "{dmin}": str(dmin)
+                "{dmin}": str(dmin),
             }
-            
+
             for key, value in replacements.items():
                 parsed_plane = parsed_plane.replace(key, value)
 
             single_planes_info.append(parsed_plane)
 
-        prj_text = prj_template.replace(
-            "{prj_name}", Path(project_file).name
-        ).replace("{plane_1ist}", ", ".join(single_planes_info))
+        prj_text = prj_template.replace("{prj_name}", Path(project_file).name).replace(
+            "{plane_1ist}", ", ".join(single_planes_info)
+        )
         with open(project_file, "wt") as file:
             file.write(prj_text)

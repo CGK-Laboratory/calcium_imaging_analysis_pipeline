@@ -8,18 +8,18 @@ import isx
 import json
 from typing import Union, Tuple, Iterable
 from .processing import fix_frames
-import pandas as pd
 import shutil
 from .files_io import (
     write_log_file,
     remove_file_and_json,
     same_json_or_remove,
     json_filename,
+    parameters_for_isx,
 )
 from .jupyter_outputs import progress_bar
 from time import perf_counter
 from datetime import timedelta
-from isx_aux_functions import (
+from .isx_aux_functions import (
     cellset_is_empty,
     create_empty_cellset,
     create_empty_events,
@@ -38,15 +38,16 @@ def timer(method):
         result = method(self, *args, **kwargs)
         end_time = perf_counter()
         elapsed_time = end_time - start_time
-        print(f'{method.__name__} executed in {timedelta(seconds=elapsed_time)}')
+        print(f"{method.__name__} executed in {timedelta(seconds=elapsed_time)}")
         self.total_time += elapsed_time
         return result
+
     return timed
 
 
 class isx_files_handler:
     """
-    This class helps handle and process Inscopix files/movies. 
+    This class helps handle and process Inscopix files/movies.
 
     Parameters
     ----------
@@ -60,13 +61,13 @@ class isx_files_handler:
         Naming patterns for the files. Also an easy way to select for one or
         multiple files from the same folder. By default "**/*.isx" (selects all)
     outputsfolders : str or list, optional
-        Folder where the outputs are saved, following the file structure after 
+        Folder where the outputs are saved, following the file structure after
         'main_data_folder'. By default "."
     processing_steps: list, optional
-        List of processing steps to run, listed in order 
+        List of processing steps to run, listed in order
         Naming steps will be use, adding one affter the previous ones. By default "["PP", "TR", "BP", "MC"]"
     single_file_match: bool, optional
-        If True the pipeline will expect one .isx file per folder listed in the 'files_patterns' 
+        If True the pipeline will expect one .isx file per folder listed in the 'files_patterns'
         variable. By default "False"
     recording_labels: list, optional
         Name the recorded file with a label to make it easier to recognize. By default "None"
@@ -81,7 +82,7 @@ class isx_files_handler:
     skip_pattern: str, optional
         String pattern to ignore certain files. Case-sensitive. Default is None
     """
-    
+
     total_time = 0
 
     @timer
@@ -101,25 +102,25 @@ class isx_files_handler:
         overwrite_metadata: bool = False,
         skip_pattern: str = None,
     ):
-        
+
         self.processing_steps = processing_steps
         self.deinterleave_output_files = []
-        
-        # Check if the parameters file exists at the given path, open and load it. 
+
+        # Check if the parameters file exists at the given path, open and load it.
         assert os.path.exists(parameters_path), "parameters file does not exist"
         with open(parameters_path) as file:
             self.default_parameters = json.load(file)
-        
-        # Check if step TR is listed more than once 
+
+        # Check if step TR is listed more than once
         assert (
             len([s for s in processing_steps if s.startswith("TR")]) <= 1
         ), "Pipeline can't handle multiple trims"
 
-        # Initialize iterator for recording labels if provided 
+        # Initialize iterator for recording labels if provided
         if recording_labels is not None:
             recording_labels_iter = iter(recording_labels)
-        
-        # Convert string inputs to lists 
+
+        # Convert string inputs to lists
         lists_inputs = {
             "main_data_folder": ifstr2list(main_data_folder),
             "outputsfolders": ifstr2list(outputsfolders),
@@ -143,9 +144,9 @@ class isx_files_handler:
             if len(v) != len_list:
                 # this will extend the single inputs
                 lists_inputs[k] = v * len_list
-        
+
         meta = {
-            "main_data_folder": lists_inputs['main_data_folder'],
+            "main_data_folder": lists_inputs["main_data_folder"],
             "outputsfolders": [],
             "recording_labels": [],
             "rec_paths": [],
@@ -159,8 +160,10 @@ class isx_files_handler:
             "frames_per_second": [],
         }
 
-        loaded_meta_files = [] # Used to avoid loading the same json file multiple times
-        
+        loaded_meta_files = (
+            []
+        )  # Used to avoid loading the same json file multiple times
+
         for mainf, subfolder, fpatter, outf in zip(
             lists_inputs["main_data_folder"],
             lists_inputs["data_subfolders"],
@@ -168,19 +171,27 @@ class isx_files_handler:
             lists_inputs["outputsfolders"],
         ):
             if check_new_inputs:
-                # Grab all the files matching the input parameters 
-                allFiles = glob(str(Path(mainf) / subfolder / fpatter),  recursive=True) #grabs all the files with fpatter.
+                # Grab all the files matching the input parameters
+                allFiles = glob(
+                    str(Path(mainf) / subfolder / fpatter), recursive=True
+                )  # grabs all the files with fpatter.
                 # Filter out files matching the skip pattern
                 if skip_pattern is not None:
-                    files = [file for file in allFiles if skip_pattern not in Path(file).name] #filter skip_pattern files out
+                    files = [
+                        file for file in allFiles if skip_pattern not in Path(file).name
+                    ]  # filter skip_pattern files out
                 else:
                     files = allFiles
-                
+
                 # Error if no files are found, lists if files were skipped
-                assert len(files) > 0, f"No file(s) found for {str(Path(mainf) / subfolder / fpatter)}, {len(allFiles)-len(files)} files skipped"
-                
-                # Prints confirmation of number of files found and skipped. 
-                print(f'{len(files)} file(s) found, {len(allFiles)-len(files)} file(s) skipped')
+                assert (
+                    len(files) > 0
+                ), f"No file(s) found for {str(Path(mainf) / subfolder / fpatter)}, {len(allFiles)-len(files)} files skipped"
+
+                # Prints confirmation of number of files found and skipped.
+                print(
+                    f"{len(files)} file(s) found, {len(allFiles)-len(files)} file(s) skipped"
+                )
 
                 metadata = {}
 
@@ -192,10 +203,10 @@ class isx_files_handler:
                 else:
                     # removes files already in metadata
                     files = [r for r in files if r not in meta["rec_paths"]]
-                
+
                 # Initializes progress bar
-                pb = progress_bar(len(files), 'Loading')
-                                
+                pb = progress_bar(len(files), "Loading")
+
                 for file in files:
                     # skip processing if metadata file already exists and overwrite is not allowed
                     if not overwrite_metadata:
@@ -206,7 +217,7 @@ class isx_files_handler:
                         )
                         if os.path.exists(json_file):
                             continue
-                    
+
                     # Read the video file and grab metadata information
                     video = isx.Movie.read(file)
                     metadata[file] = copy.deepcopy(meta)
@@ -221,7 +232,7 @@ class isx_files_handler:
                     ]
 
                     # Assign recording labels, if true -> same as rec_paths
-                    # Else use input recording labels 
+                    # Else use input recording labels
                     if recording_labels is None:
                         metadata[file]["recording_labels"] = metadata[file]["rec_paths"]
                     else:
@@ -276,7 +287,7 @@ class isx_files_handler:
                             )
                     video.flush()
                     del video  # usefull for windows
-                    
+
                     # Update metadata with focus data
                     if len(efocus) == 1:
                         metadata[file]["focus_files"][file] = [file]
@@ -310,8 +321,7 @@ class isx_files_handler:
 
                     # Update progress bar
                     pb.update_progress_bar(1)
-                    
-                
+
                 # Save metadata to JSON files
                 for raw_path, intern_data in metadata.items():
                     json_file = os.path.join(
@@ -326,16 +336,15 @@ class isx_files_handler:
                         json.dump(intern_data, j_file)
             else:
                 assert not overwrite_metadata, "Overwriting json file not possible"
-            
+
             # Load metadata from existing JSON files
             base_folder = os.path.join(outf, subfolder)
             files = glob(
                 os.path.join(
                     base_folder, os.path.splitext(fpatter)[0] + "_metadata.json"
                 ),
-                recursive = True
+                recursive=True,
             )
-
 
             for f in files:
                 if f in loaded_meta_files:
@@ -375,7 +384,7 @@ class isx_files_handler:
 
         # Copy the list of processing steps to a local variable
         local_processing_steps = self.processing_steps
-        
+
         # Remove DI from list, if its first
         if local_processing_steps[0] == "DI":
             local_processing_steps.remove("DI")
@@ -386,10 +395,10 @@ class isx_files_handler:
         inputs = []
 
         suffix_out = "-" + "-".join(local_processing_steps[: opi + 1]) + ".isxd"
-        
+
         if opi == 0:
             suffix_in = None
-            #inputs = self.p_rec_paths
+            # inputs = self.p_rec_paths
             inputs = self.deinterleave_output_files
         else:
             suffix_in = "-" + "-".join(local_processing_steps[:opi]) + ".isxd"
@@ -415,14 +424,14 @@ class isx_files_handler:
             With the outputs file path
 
         """
-        
+
         local_processing_steps = self.processing_steps
-        
+
         if "DFF" in local_processing_steps:
             local_processing_steps.remove("DFF")
         if "PM" in local_processing_steps:
             local_processing_steps.remove("PM")
-        
+
         if op is None:
             op = self.processing_steps[-1]
         assert (
@@ -545,7 +554,7 @@ class isx_files_handler:
         None
 
         """
-        if op == 'DI':
+        if op == "DI":
             paths = self.deinterleave_output_files
         elif op == "DFF":
             paths = self.get_results_filenames("dff", op=None)
@@ -553,7 +562,7 @@ class isx_files_handler:
             paths = self.get_results_filenames("maxdff", op=None)
         else:
             paths = self.get_filenames(op)
-        
+
         for path in paths:
             if os.path.exists(path):
                 os.remove(path)
@@ -606,7 +615,7 @@ class isx_files_handler:
                 output = self.get_results_filenames("maxdff", op=None)
                 amount_of_files = len(input)
                 pairlist = zip(input, output)
-            if op in ["PP","TR", "BP", "MC"]:
+            if op in ["PP", "TR", "BP", "MC"]:
                 amount_of_files, pairlist = self.get_pair_filenames(op)
         elif op == "MC":
             translation_files = [
@@ -627,20 +636,20 @@ class isx_files_handler:
             "MC": "motion_correct",
             "TR": "trim",
             "DFF": "dff",
-            "PM": "project_movie"
+            "PM": "project_movie",
         }
 
         operation = [x for k, x in steps_list.items() if op.startswith(k)]
         assert len(operation) == 1, f"Step {op} not starts with {steps_list}."
         operation = operation[0]
 
-        if op != 'DI':
+        if op != "DI":
             parameters = self.default_parameters[operation].copy()
             for key, value in kws.items():
                 assert key in parameters, f"The parameter: {key} does not exist"
                 parameters[key] = value
-        
-        #TASK: No need for this step at this point - Can you confirm Fernando?
+
+        # TASK: No need for this step at this point - Can you confirm Fernando?
         '''
         if self.processing_steps.index(op) == 0:  # if first step
             # check if all exist
@@ -651,9 +660,11 @@ class isx_files_handler:
                     Run .de_interleave() to De-interleave multiplane movies"""
         '''
 
-        if op.startswith('DI'):
+        if op.startswith("DI"):
             print("De-interleaving movies, please wait...")
-            self.deinterleave_output_files = de_interleave(focus_files = self.focus_files, efocus = self.efocus)
+            self.deinterleave_output_files = de_interleave(
+                focus_files=self.focus_files, efocus=self.efocus
+            )
         if op.startswith("PP"):
             print("Preprocessing movies, please wait...")
             preprocess_step(pairlist, parameters, amount_of_files, verbose)
@@ -663,7 +674,13 @@ class isx_files_handler:
         if op.startswith("MC"):
             print("Applying motion correction, Please wait...")
             motion_correct_step(
-                translation_files, crop_rect_files, parameters, pairlist, amount_of_files, verbose)
+                translation_files,
+                crop_rect_files,
+                parameters,
+                pairlist,
+                amount_of_files,
+                verbose,
+            )
         if op.startswith("TR"):
             print("Trim movies, Please wait...")
             trim_movie(pairlist, parameters, amount_of_files, verbose)
@@ -742,7 +759,7 @@ class isx_files_handler:
                     if os.path.exists(json_file):
                         os.remove(json_file)
 
-        pb = progress_bar(len(inputs_files), 'Extracting Cells')
+        pb = progress_bar(len(inputs_files), "Extracting Cells")
 
         for input, output in zip(inputs_files, cellsets):
             new_data = {
@@ -929,14 +946,24 @@ class isx_files_handler:
         ed_parameters = self.default_parameters["event_detection"].copy()
         ar_parameters = self.default_parameters["accept_reject"].copy()
         mpr_parameters = self.default_parameters["multiplane_registration"].copy()
-
+        if detection_params is not None:
+            for key, value in detection_params.items():
+                assert key in ed_parameters, f"The parameter: {key} does not exist"
+                ed_parameters[key] = value
+        if accept_reject_params is not None:
+            for key, value in accept_reject_params.items():
+                assert key in ar_parameters, f"The parameter: {key} does not exist"
+                ar_parameters[key] = value
         if multiplane_params is not None:
             for key, value in multiplane_params.items():
                 assert key in mpr_parameters, f"The parameter: {key} does not exist"
                 mpr_parameters[key] = value
 
         self.output_file_paths = []
-        pb = progress_bar(len(self.focus_files.keys()), 'Running Multiplane Registration to')
+        pb = progress_bar(
+            len(self.focus_files.keys()), "Running Multiplane Registration to"
+        )
+
         for main_file, single_planes in self.focus_files.items():
             if len(single_planes) == 1:  # doesn't have multiplane
                 continue
@@ -956,13 +983,22 @@ class isx_files_handler:
                 f"{cellsetname}-accept_reject", op=None, idx=idx, single_plane=False
             )[0]
 
-            input_cell_set_file_names = [os.path.basename(file) for file in input_cell_set_files]
+            input_cell_set_file_names = [
+                os.path.basename(file) for file in input_cell_set_files
+            ]
             new_data = {
                 "input_cell_set_files": input_cell_set_file_names,
                 "output_cell_set_file": os.path.basename(output_cell_set_file),
                 "auto_accept_reject": os.path.basename(ar_cell_set_file),
             }
             mpr_parameters.update(new_data)
+
+            if overwrite:
+                if os.path.exists(output_cell_set_file):
+                    os.remove(output_cell_set_file)
+                    json_file = json_filename(output_cell_set_file)
+                    if os.path.exists(json_file):
+                        os.remove(json_file)
 
             if not same_json_or_remove(
                 mpr_parameters,
@@ -980,8 +1016,10 @@ class isx_files_handler:
                         f"Warning: File: {output_cell_set_file} not generated.\n"
                         + "Empty cellmap created in its place"
                     )
-                    create_empty_cellset(input_file=input_cell_set_files[0],
-                                           output_cell_set_file=output_cell_set_file)
+                    create_empty_cellset(
+                        input_file=input_cell_set_files[0],
+                        output_cell_set_file=output_cell_set_file,
+                    )
 
                 elif len(input_cellsets) == 1:
                     shutil.copyfile(input_cellsets[0], output_cell_set_file)
@@ -992,7 +1030,7 @@ class isx_files_handler:
                             ["comments", "auto_accept_reject"],
                             {
                                 "input_cell_set_files": input_cellsets,
-                                "output_cell_set_file": output_cell_set_file
+                                "output_cell_set_file": output_cell_set_file,
                             },
                         )
                     )
@@ -1033,7 +1071,7 @@ class isx_files_handler:
                         f"Warning: Event_detection, failed to create file: {ed_file}.\n"
                         + "Empty file created with its place"
                     )
-                    create_empty_events(output_cell_set_file,ed_file)
+                    create_empty_events(output_cell_set_file, ed_file)
 
                 write_log_file(
                     ed_parameters,
@@ -1072,92 +1110,6 @@ class isx_files_handler:
             self.output_file_paths.append(output_cell_set_file)
             pb.update_progress_bar(increment=1)
         print("done")
-  
-    def cell_metrics(self, cellsetname: str, verbose=False) -> pd.DataFrame:
-        """
-        This function use the isx.cell_metrics function, which compute cell metrics
-        for a given cell set and events combination
-
-        Parameters
-        ----------
-        cellsetname : str
-            cell label to get filename
-        verbose : bool, optional
-            Show additional messages, by default False
-
-        Returns
-        -------
-        pd.DataFrame
-            a concatenates list with metrics
-
-
-        """
-        cell_set_files = self.get_results_filenames(
-            f"{cellsetname}", op=None, single_plane=False
-        )
-        ed_files = self.get_results_filenames(
-            f"{cellsetname}-ED", op=None, single_plane=False
-        )
-        metrics_files = self.get_results_filenames(
-            f"{cellsetname}_metrics.csv", op=None, single_plane=False
-        )
-
-        for cellset, ed, metric in zip(cell_set_files, ed_files, metrics_files):
-            inputs_args = {
-                "input_cell_set_files": os.path.basename(cellset),
-                "input_event_set_files": os.path.basename(ed),
-                "output_metrics_files": os.path.basename(metric),
-            }
-            if not same_json_or_remove(
-                inputs_args,
-                output=metric,
-                verbose=verbose,
-                input_files_keys=["input_cell_set_files", "input_event_set_files"],
-            ):
-                try:
-                    isx.cell_metrics(
-                        **parameters_for_isx(
-                            inputs_args,
-                            to_update={
-                                "input_cell_set_files": cellset,
-                                "input_event_set_files": ed,
-                                "output_metrics_files": metric,
-                            },
-                        )
-                    )
-                except Exception as e:
-                    print(e)
-                write_log_file(
-                    inputs_args,
-                    os.path.dirname(metric),
-                    {"function": "cell_metrics"},
-                    input_files_keys=["input_cell_set_files", "input_event_set_files"],
-                    output_file_key="output_metrics_files",
-                )
-
-        df = []
-        for metric_file, label, cell_set_file in zip(
-            metrics_files, self.recording_labels, cell_set_files
-        ):
-            aux = pd.read_csv(metric_file)
-            aux["Recording Label"] = label
-            cell_set = isx.CellSet.read(cell_set_file)
-            num_cells = cell_set.num_cells
-            status = pd.DataFrame.from_dict(
-                {
-                    cell: [cell_set.get_cell_name(cell), cell_set.get_cell_status(cell)]
-                    for cell in range(num_cells)
-                },
-                orient="index",
-                columns=["cellName", "status"],
-            )
-            cell_set.flush()
-            aux = aux.merge(status, on="cellName")
-
-            df.append(aux)
-
-        return pd.concat(df)
-
 
     def run_deconvolution(
         self,
@@ -1168,7 +1120,7 @@ class isx_files_handler:
     ) -> None:
         """
         This function runs the deconvolution step, save the new cellsets with the updated traces,
-        and the new event detecction 
+        and the new event detecction
 
         Parameters
         ----------
@@ -1198,15 +1150,15 @@ class isx_files_handler:
             f"{cellsetname}", op=None, single_plane=False
         )
         denoise_files = self.get_results_filenames(
-                f"{cellsetname}-DNI", op=None,single_plane=False
+            f"{cellsetname}-DNI", op=None, single_plane=False
         )
         ed_files = self.get_results_filenames(
-                f"{cellsetname}-SPI", op=None, single_plane=False
+            f"{cellsetname}-SPI", op=None, single_plane=False
         )
-        pb = progress_bar(len(cell_sets), 'Running Deconvolution Registration to')
-        
-        for cellset,denoise_file,ed_file in zip(cell_sets,denoise_files,ed_files):
-            
+        pb = progress_bar(len(cell_sets), "Running Deconvolution Registration to")
+
+        for cellset, denoise_file, ed_file in zip(cell_sets, denoise_files, ed_files):
+
             if overwrite:
                 remove_file_and_json(denoise_file)
                 remove_file_and_json(ed_file)
@@ -1223,23 +1175,26 @@ class isx_files_handler:
                 verbose=verbose,
                 input_files_keys=["input_raw_cellset_files"],
             ):
-                if cellset_is_empty(cellset, accepted_only=parameters['accepted_only']):
-                    create_empty_events(cellset,ed_file)
-                    create_empty_cellset(cellset,denoise_file)
+                if cellset_is_empty(cellset, accepted_only=parameters["accepted_only"]):
+                    create_empty_events(cellset, ed_file)
+                    create_empty_cellset(cellset, denoise_file)
                 else:
                     isx.deconvolve_cellset(
-                            **parameters_for_isx(
-                                parameters,
-                                ["comments"],
-                                {
-                                    "input_raw_cellset_files": cellset,
-                                    "output_denoised_cellset_files": denoise_file,
-                                    "output_spike_eventset_files": ed_file,
-                                },
-                            )
+                        **parameters_for_isx(
+                            parameters,
+                            ["comments"],
+                            {
+                                "input_raw_cellset_files": cellset,
+                                "output_denoised_cellset_files": denoise_file,
+                                "output_spike_eventset_files": ed_file,
+                            },
                         )
+                    )
 
-                for ofile,outkey in ((denoise_file,"output_denoised_cellset_files"),(ed_file,"output_spike_eventset_files")):
+                for ofile, outkey in (
+                    (denoise_file, "output_denoised_cellset_files"),
+                    (ed_file, "output_spike_eventset_files"),
+                ):
                     write_log_file(
                         parameters,
                         os.path.dirname(ofile),
@@ -1247,7 +1202,7 @@ class isx_files_handler:
                         input_files_keys=["input_raw_cellset_files"],
                         output_file_key=outkey,
                     )
-               
+
             pb.update_progress_bar(increment=1)
         print("done")
 
@@ -1327,7 +1282,7 @@ class isx_files_handler:
         print("done")
 
     def get_total_time(cls):
-        print(f'Current total execution time {timedelta(seconds=cls.total_time)}')
+        print(f"Current total execution time {timedelta(seconds=cls.total_time)}")
 
 
 def de_interleave(focus_files: dict, efocus: list, overwrite: bool = False) -> None:
@@ -1345,9 +1300,9 @@ def de_interleave(focus_files: dict, efocus: list, overwrite: bool = False) -> N
     None
 
     """
-    
+
     # Initialize progress bar
-    pb = progress_bar(len(focus_files), 'Deinterleaving')
+    pb = progress_bar(len(focus_files), "Deinterleaving")
     output_files = []
     for (main_file, planes_fs), focus in zip(focus_files.items(), efocus):
         if len(focus) > 1:  # has multiplane
@@ -1406,7 +1361,10 @@ def de_interleave(focus_files: dict, efocus: list, overwrite: bool = False) -> N
 
 
 def preprocess_step(
-    pairlist: Tuple[list, list], parameters: dict, amount_of_files: int, verbose: bool = False 
+    pairlist: Tuple[list, list],
+    parameters: dict,
+    amount_of_files: int,
+    verbose: bool = False,
 ) -> None:
     """
     After performing checks, use the isx.preprocess function, which preprocesses movies,
@@ -1426,10 +1384,10 @@ def preprocess_step(
     None
 
     """
-    
+
     # Initialize progress bar
-    pb = progress_bar(amount_of_files, 'Preprocessing')
-    
+    pb = progress_bar(amount_of_files, "Preprocessing")
+
     for input, output in pairlist:
         if isinstance(parameters["spatial_downsample_factor"], str):
             res_idx, value = parameters["spatial_downsample_factor"].split("_")
@@ -1485,7 +1443,10 @@ def preprocess_step(
 
 
 def spatial_filter_step(
-    pairlist: Tuple[list, list], parameters: dict, amount_of_files: int, verbose: bool = False
+    pairlist: Tuple[list, list],
+    parameters: dict,
+    amount_of_files: int,
+    verbose: bool = False,
 ) -> None:
     """
     After performing checks, use the isx.spatial_filter function, which
@@ -1505,9 +1466,9 @@ def spatial_filter_step(
     None
 
     """
-    
+
     # Initialize progress bar
-    pb = progress_bar(amount_of_files, 'Applying Bandpass Filter to')
+    pb = progress_bar(amount_of_files, "Applying Bandpass Filter to")
 
     for input, output in pairlist:
         parameters.update(
@@ -1543,15 +1504,13 @@ def spatial_filter_step(
         pb.update_progress_bar(1)
 
 
-
-
 def motion_correct_step(
     translation_files: list,
     crop_rect_files: list,
     parameters: dict,
     pairlist: Tuple[list, list],
     amount_of_files: int,
-    verbose=False
+    verbose=False,
 ) -> None:
     """
     After checks, use the isx.motion_correct function, which motion correct movies to a reference frame.
@@ -1580,7 +1539,7 @@ def motion_correct_step(
     --------
     """
     # Initialize progress bar
-    pb = progress_bar(amount_of_files, 'Applying Motion Correction to')
+    pb = progress_bar(amount_of_files, "Applying Motion Correction to")
     for i, (input, output) in enumerate(pairlist):
         new_data = {
             "input_movie_files": os.path.basename(input),
@@ -1620,8 +1579,12 @@ def motion_correct_step(
         # Update progress bar
         pb.update_progress_bar(1)
 
+
 def trim_movie(
-    pairlist: Tuple[list, list], user_parameters: dict, amount_of_files: int,  verbose: bool = False
+    pairlist: Tuple[list, list],
+    user_parameters: dict,
+    amount_of_files: int,
+    verbose: bool = False,
 ) -> None:
     """
     After verifying that the user_parameters are correct and obtaining the maximum file frame,
@@ -1641,14 +1604,14 @@ def trim_movie(
     None
 
     """
-    
+
     assert (
         user_parameters["video_len"] is not None
     ), "Trim movie requires parameter video len"
-    
+
     # Initialize progress bar
-    pb = progress_bar(amount_of_files, 'Trimming')
-    
+    pb = progress_bar(amount_of_files, "Trimming")
+
     for input, output in pairlist:
         parameters = {
             "input_movie_file": os.path.basename(input),
@@ -1690,12 +1653,13 @@ def trim_movie(
 
 
 def create_dff(
-    pairlist: Tuple[list, list], 
+    pairlist: Tuple[list, list],
     parameters: dict,
-    amount_of_files: int, 
-    overwrite=False, 
-    verbose=False, 
-    **kws) -> None:
+    amount_of_files: int,
+    overwrite=False,
+    verbose=False,
+    **kws,
+) -> None:
     """
     This function applies isx.dff function, to compute the DF/F movies.
 
@@ -1712,7 +1676,7 @@ def create_dff(
 
     """
     # Initialize progress bar
-    pb = progress_bar(amount_of_files, 'Normalizing via DF/F0')
+    pb = progress_bar(amount_of_files, "Normalizing via DF/F0")
 
     if overwrite:
         for input, output in zip(pairlist):
@@ -1755,8 +1719,8 @@ def create_dff(
 
 
 def project_movie(
-    pairlist: Tuple[list, list], 
-    parameters: dict, 
+    pairlist: Tuple[list, list],
+    parameters: dict,
     amount_of_files: int,
     overwrite=False,
     verbose=False,
@@ -1785,10 +1749,10 @@ def project_movie(
     """
 
     # Initialize progress bar
-    pb = progress_bar(amount_of_files, 'Projecting Movies')
+    pb = progress_bar(amount_of_files, "Projecting Movies")
 
     if overwrite:
-        #get rid of self
+        # get rid of self
         for input, output in pairlist:
             remove_file_and_json(output)
 
@@ -1796,7 +1760,7 @@ def project_movie(
         assert key in parameters, f"The parameter: {key} does not exist"
         parameters[key] = value
 
-    #turn into pairlist
+    # turn into pairlist
     for input, output in pairlist:
         new_data = {
             "input_movie_files": os.path.basename(input),
@@ -1947,31 +1911,3 @@ def get_efocus(gpio_file: str) -> list:
         video_efocus.shape[0] < 4
     ), f"{gpio_file}: Too many efocus detected, early frames issue."
     return [int(v) for v in video_efocus]
-
-
-def parameters_for_isx(
-    d: dict, keys_to_remove: list = [], to_update: dict = {}
-) -> dict:
-    """
-    Creates a copy of a dictionary while removing references to specific keys
-
-    Parameters
-    ----------
-    d : dict
-        Distionary to copy without a particular list
-    keys : list
-        List of keys to be excluded in the returned dictionary
-    to_update : dict
-        key to update from original dictionary
-    Returns
-    -------
-    dict
-        copy of the dictionary provided as an argument, excluding any references to the specified keys
-
-    """
-    copy_dict = d.copy()
-    for key in keys_to_remove:
-        if key in d:
-            del copy_dict[key]
-    copy_dict.update(to_update)
-    return copy_dict

@@ -5,12 +5,11 @@ from typing import Union
 import os
 import json
 import pandas as pd
-import unittest
 
-def fix_frames(file: str,
-               std_th: Union[None,
-                             float] = None,
-               report: bool = True) -> int:
+
+def fix_frames(
+    file: str, std_th: Union[None, float] = None, report: bool = True
+) -> int:
     """It fixes inplace a file interpolating its broken frames
 
     Parameters
@@ -35,8 +34,7 @@ def fix_frames(file: str,
         frame = movie.get_frame_data(i)
         mean_fluores[i] = frame.mean()
 
-    s_mean_fluores = (mean_fluores - np.mean(mean_fluores)) / \
-        np.std(mean_fluores)
+    s_mean_fluores = (mean_fluores - np.mean(mean_fluores)) / np.std(mean_fluores)
 
     if std_th is not None:
         broken_frames = np.where(s_mean_fluores > std_th)[0]
@@ -63,20 +61,21 @@ def fix_frames(file: str,
             else:
                 prev_coef = (bf - prev_ok_fr) / gap
                 next_coef = (next_ok_fr - bf) / gap
-                frame = next_coef * movie.get_frame_data(next_ok_fr) + \
-                    prev_coef * movie.get_frame_data(prev_ok_fr)
+                frame = next_coef * movie.get_frame_data(
+                    next_ok_fr
+                ) + prev_coef * movie.get_frame_data(prev_ok_fr)
             # Frames have to be set in increasing order!
             new_frames[bf] = frame.astype(dtype)
 
-    assert len(broken_frames) <= (0.05 * num_samples), \
-        "Too many frames to fix (more than 5%)"
+    assert len(broken_frames) <= (
+        0.05 * num_samples
+    ), "Too many frames to fix (more than 5%)"
 
-    temp_file = os.path.splitext(file)[0] + '_temp.isxd'
+    temp_file = os.path.splitext(file)[0] + "_temp.isxd"
     if len(broken_frames) > 0:
         if os.path.exists(temp_file):
             os.remove(temp_file)
-        fixed_movie = isx.Movie.write(
-            temp_file, movie.timing, movie.spacing, dtype)
+        fixed_movie = isx.Movie.write(temp_file, movie.timing, movie.spacing, dtype)
 
         # fixed_movie_data = np.zeros(list(movie.spacing.num_pixels) + [num_samples],
         #    fixed_movie.data_type)
@@ -94,17 +93,17 @@ def fix_frames(file: str,
         os.rename(temp_file, file)
     if report:
         fig = plt.figure()
-        plt.plot(s_mean_fluores, c='blue', lw=2)
+        plt.plot(s_mean_fluores, c="blue", lw=2)
         for bf in broken_frames:
-            plt.axvline(bf, color='red', ls='--', alpha=0.8, lw=1.5)
+            plt.axvline(bf, color="red", ls="--", alpha=0.8, lw=1.5)
         if std_th is not None:
-            plt.axhline(std_th, color='green', ls='--', alpha=0.8, lw=1.5)
+            plt.axhline(std_th, color="green", ls="--", alpha=0.8, lw=1.5)
 
-        plt.grid('on')
-        plt.ylabel('Standardize Mean Frame Fluorescence')
-        plt.xlabel('Frame')
-        plt.title('Fixes: {} frames'.format(len(broken_frames)))
-        fig.savefig(os.path.splitext(file)[0] + '.png')
+        plt.grid("on")
+        plt.ylabel("Standardize Mean Frame Fluorescence")
+        plt.xlabel("Frame")
+        plt.title("Fixes: {} frames".format(len(broken_frames)))
+        fig.savefig(os.path.splitext(file)[0] + ".png")
         plt.close(fig)
     return len(broken_frames)
 
@@ -114,7 +113,6 @@ def longitudinal_registration(
     output_cell_set_files: list,
     json_file: str,
     overwrite: bool = True,
-    verbose: bool = False,
     **kws,
 ) -> bool:
     """
@@ -133,8 +131,6 @@ def longitudinal_registration(
         json file path
     overwrite : bool, optional
             Remove results and recompute them, by default False
-    verbose : bool, optional
-            Show additional messages, by default False
 
     Returns
     -------
