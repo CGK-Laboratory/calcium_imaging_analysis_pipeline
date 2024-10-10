@@ -29,7 +29,7 @@ def create_empty_cellset(input_file: str, output_cell_set_file: str):
     Returns:
         None
     """
-    cell_set_plane = isx.CellSet.read()
+    cell_set_plane = isx.CellSet.read(input_file)
     cell_set = isx.CellSet.write(
         output_cell_set_file,
         cell_set_plane.timing,
