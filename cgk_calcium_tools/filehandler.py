@@ -214,6 +214,7 @@ class isx_files_handler:
                             + "_metadata.json",
                         )
                         if os.path.exists(json_file):
+                            pb.update_progress_bar(1)
                             continue
 
                     # Read the video file and grab metadata information
