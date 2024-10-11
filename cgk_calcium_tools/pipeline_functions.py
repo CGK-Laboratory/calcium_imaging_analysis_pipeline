@@ -18,13 +18,11 @@ def register(name: Union[str, list],message=None) -> None:
 
     def decorator(func: Callable) -> None:
         assert isinstance(func, Callable)
-        if isinstance(name, list):
-            for n in name:
-                f_register[n] = func
-
-        else:
-            f_register[name] = func
-        f_message[name] = message
+        if not isinstance(name, list):
+            name = [name]
+        for n in name:
+            f_register[n] = func
+            f_message[name] = message
     return decorator
 
         
