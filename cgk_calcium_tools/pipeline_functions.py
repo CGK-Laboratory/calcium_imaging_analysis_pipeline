@@ -11,17 +11,19 @@ import os
 import numpy as np
 f_register: dict[str, Callable] = {}
 f_message: dict[str, str] = {}
-def register(name: Union[str, list],message=None) -> None:
+def register(name: Union[str, list], message=None) -> None:
     
     if message is None:
         message = f"Running function: {name}"
 
     def decorator(func: Callable) -> None:
         assert isinstance(func, Callable)
-        if not isinstance(name, list):
-            name = [name]
-        for n in name:
-            f_register[n] = func
+        if  isinstance(name, list):            
+            for n in name:
+                f_register[n] = func
+                f_message[n] = message
+        else:
+            f_register[name] = func
             f_message[name] = message
     return decorator
 
