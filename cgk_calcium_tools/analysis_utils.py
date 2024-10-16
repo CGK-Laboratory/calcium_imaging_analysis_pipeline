@@ -48,9 +48,9 @@ def compute_traces_corr(fh, cellsetname: str, verbose=False) -> pd.DataFrame:
             num_cells = cs.num_cells
             corr = np.zeros((num_cells, num_cells))
             for i in range(num_cells-1):
-                tr1 = cs.get_cell_trace(i)
+                tr1 = cs.get_cell_trace_data(i)
                 for j in range(i+1, num_cells):
-                    tr2 = cs.get_cell_trace(j)
+                    tr2 = cs.get_cell_trace_data(j)
                     corr[i, j] = np.corrcoef(tr1, tr2)[0, 1]
                     corr[j, i] = corr[i, j]
             labels = [cs.get_cell_name(i) for i in range(cs.num_cells)]
