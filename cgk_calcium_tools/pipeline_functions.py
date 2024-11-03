@@ -260,6 +260,56 @@ def isx_dff(input, output, parameters, verbose) -> None:
     )
 
 
+@register(['isx:project_movie', "project_movie"],"Projecting Movies")
+def project_movie(input, output, parameters: dict, verbose:bool=False) -> None:
+    """
+    This function applies isx.project_movie to project movies to a single statistic image.
+
+    Parameters
+    ----------
+    overwrite : bool, optional
+        Remove results and recompute them, by default False
+    verbose : bool, optional
+        Show additional messages, by default False
+
+    Returns
+    -------
+    None
+
+    """
+    new_data = {
+        "input_movie_files": os.path.basename(input),
+        "output_image_file": os.path.basename(output),
+    }
+    parameters.update(new_data)
+    if same_json_or_remove(
+        parameters,
+        input_files_keys=["input_movie_files"],
+        output=output,
+        verbose=verbose,
+    ):
+        return
+    isx.project_movie(
+        **parameters_for_isx(
+            parameters,
+            ["comments"],
+            {"input_movie_files": input, "output_image_file": output},
+        )
+    )
+    write_log_file(
+        parameters,
+        os.path.dirname(output),
+        {"function": "project_movie"},
+        input_files_keys=["input_movie_files"],
+        output_file_key="output_image_file",
+    )
+
+
+
+
+
+
+
 def de_interleave(main_file, planes_fs, focus, overwrite: bool = False) -> None:
     """
     This function applies the isx.de_interleave function, which de-interleaves multiplane movies

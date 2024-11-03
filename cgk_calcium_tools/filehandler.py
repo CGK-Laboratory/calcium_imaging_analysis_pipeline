@@ -23,10 +23,11 @@ from .isx_aux_functions import (
     cellset_is_empty,
     create_empty_cellset,
     create_empty_events,
-    get_efocus
+    get_efocus,
 )
 from .pipeline_functions import f_register, f_message, de_interleave
 from .analysis_utils import compute_traces_corr
+
 
 def ifstr2list(x) -> list:
     if isinstance(x, list):
@@ -456,14 +457,13 @@ class isx_files_handler:
             DataFrame with the correlation matrix
         """
 
-
         cell_set_files = fh.get_results_filenames(
             f"{cellsetname}", op=None, single_plane=False
         )
         corr_files = fh.get_results_filenames(
-        f"{cellsetname}_corr.csv", op=None, single_plane=False
+            f"{cellsetname}_corr.csv", op=None, single_plane=False
         )
-        return compute_traces_corr(cell_set_files,corr_files,verbose=verbose)
+        return compute_traces_corr(cell_set_files, corr_files, verbose=verbose)
 
     def get_results_filenames(
         self,
@@ -631,21 +631,25 @@ class isx_files_handler:
 
         if self.processing_steps.index(op) == 0:  # deinterleave needed
             pb = progress_bar(len(self.focus_files), "Deinterleaving")
-            for (main_file, planes_fs), focus in zip(self.focus_files.items(), self.efocus):
+            for (main_file, planes_fs), focus in zip(
+                self.focus_files.items(), self.efocus
+            ):
                 de_interleave(main_file, planes_fs, focus)
                 pb.update_progress_bar(1)
-        if op.startswith("PP") or op.startswith("BP") or op.startswith("MC") or op.startswith("DFF"):
-            pb = progress_bar(amount_of_files,f_message[operation])
+        if (
+            op.startswith("PP")
+            or op.startswith("BP")
+            or op.startswith("MC")
+            or op.startswith("DFF")
+            or op.startswith("PM")
+        ):
+            pb = progress_bar(amount_of_files, f_message[operation])
             for input, output in pairlist:
-                f_register[operation](input, output , parameters, verbose)
+                f_register[operation](input, output, parameters, verbose)
                 pb.update_progress_bar(1)
         if op.startswith("TR"):
             print("Trim movies, Please wait...")
             trim_movie(pairlist, parameters, amount_of_files, verbose)
-        if op.startswith("PM"):
-            print("Projecting Movie, Please wait...")
-            project_movie(pairlist, parameters, amount_of_files, overwrite, verbose)
-
         print("done")
 
     @timer
@@ -1241,8 +1245,6 @@ class isx_files_handler:
         print(f"Current total execution time {timedelta(seconds=cls.total_time)}")
 
 
-
-
 def trim_movie(
     pairlist: Tuple[list, list],
     user_parameters: dict,
@@ -1313,77 +1315,3 @@ def trim_movie(
         )
         # Update progress bar
         pb.update_progress_bar(1)
-
-def project_movie(
-    pairlist: Tuple[list, list],
-    parameters: dict,
-    amount_of_files: int,
-    overwrite=False,
-    verbose=False,
-    **kws,
-) -> None:
-    """
-    This function applies isx.project_movie to project movies to a single statistic image.
-
-    Parameters
-    ----------
-    input_name : str, optional
-        Input file path, by default "dff"
-    output_name : str, optional
-        Output file path, by default "maxdff"
-    operation : str, optional
-        Preprocessing operation to check, by default None.
-    overwrite : bool, optional
-        Remove results and recompute them, by default False
-    verbose : bool, optional
-        Show additional messages, by default False
-
-    Returns
-    -------
-    None
-
-    """
-
-    # Initialize progress bar
-    pb = progress_bar(amount_of_files, "Projecting Movies")
-
-    if overwrite:
-        # get rid of self
-        for input, output in pairlist:
-            remove_file_and_json(output)
-
-    for key, value in kws.items():
-        assert key in parameters, f"The parameter: {key} does not exist"
-        parameters[key] = value
-
-    # turn into pairlist
-    for input, output in pairlist:
-        new_data = {
-            "input_movie_files": os.path.basename(input),
-            "output_image_file": os.path.basename(output),
-        }
-        parameters.update(new_data)
-        if same_json_or_remove(
-            parameters,
-            input_files_keys=["input_movie_files"],
-            output=output,
-            verbose=verbose,
-        ):
-            continue
-        isx.project_movie(
-            **parameters_for_isx(
-                parameters,
-                ["comments"],
-                {"input_movie_files": input, "output_image_file": output},
-            )
-        )
-        write_log_file(
-            parameters,
-            os.path.dirname(output),
-            {"function": "project_movie"},
-            input_files_keys=["input_movie_files"],
-            output_file_key="output_image_file",
-        )
-        # Update progress bar
-        pb.update_progress_bar(1)
-    print("done")
