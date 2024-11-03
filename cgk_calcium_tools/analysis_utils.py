@@ -5,10 +5,9 @@ import numpy as np
 import os
 from .files_io import write_log_file, same_json_or_remove, parameters_for_isx
 
-def compute_traces_corr(fh, cellsetname: str, verbose=False) -> pd.DataFrame:
+def compute_traces_corr(cell_set_files: list, corr_files: list, verbose=False) -> pd.DataFrame:
     """
-    This function runs the isx.cell_metrics function, which compute cell metrics
-    for a given cell set and events combination
+    This function compute the correlation matrix for the cell traces.
 
     Parameters
     ----------
@@ -22,16 +21,9 @@ def compute_traces_corr(fh, cellsetname: str, verbose=False) -> pd.DataFrame:
     Returns
     -------
     pd.DataFrame
-        a concatenates list with metrics
-
-
+        DataFrame with the correlation matrix
     """
-    cell_set_files = fh.get_results_filenames(
-        f"{cellsetname}", op=None, single_plane=False
-    )
-    corr_files = fh.get_results_filenames(
-        f"{cellsetname}_corr.csv", op=None, single_plane=False
-    )
+
     for cellset, corr_file in zip(cell_set_files, corr_files):
         inputs_args = {
             "input_cell_set_file": os.path.basename(cellset),

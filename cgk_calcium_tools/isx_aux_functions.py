@@ -3,6 +3,31 @@ import numpy as np
 import os
 from typing import Iterable
 
+def get_efocus(gpio_file: str) -> list:
+    """
+    Read the gpio set from a file and get the data associated.
+
+    Parameters
+    ----------
+    gpio_file : str
+        path of gpio file
+
+    Returns
+    -------
+    list
+        list with the video_efocus
+
+    """
+    gpio_set = isx.GpioSet.read(gpio_file)
+    efocus_values = gpio_set.get_channel_data(gpio_set.channel_dict["e-focus"])[1]
+    efocus_values, efocus_counts = np.unique(efocus_values, return_counts=True)
+    min_frames_per_efocus = 100
+    video_efocus = efocus_values[efocus_counts >= min_frames_per_efocus]
+    assert (
+        video_efocus.shape[0] < 4
+    ), f"{gpio_file}: Too many efocus detected, early frames issue."
+    return [int(v) for v in video_efocus]
+
 def create_empty_events(cell_set_file,ed_file):
     """
     Creates an empty event set file with the timing information from a given cell set file.

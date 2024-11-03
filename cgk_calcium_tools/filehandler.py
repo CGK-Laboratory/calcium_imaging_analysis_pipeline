@@ -8,6 +8,7 @@ import isx
 import json
 from typing import Union, Tuple
 import shutil
+import pandas as pd
 from .files_io import (
     write_log_file,
     remove_file_and_json,
@@ -22,8 +23,10 @@ from .isx_aux_functions import (
     cellset_is_empty,
     create_empty_cellset,
     create_empty_events,
+    get_efocus
 )
-from .pipeline_functions import f_register, f_message
+from .pipeline_functions import f_register, f_message, de_interleave
+from .analysis_utils import compute_traces_corr
 
 def ifstr2list(x) -> list:
     if isinstance(x, list):
@@ -436,28 +439,31 @@ class isx_files_handler:
             outputs.append(str(Path(ofolder, Path(file).stem + suffix_out)))
         return outputs
 
-    def check_str_in_filenames(self, strlist: list, only_warning: bool = True) -> None:
+    def compute_traces_corr(fh, cellsetname: str, verbose=False) -> pd.DataFrame:
         """
-        This method verify the order of the files. Checking that each element of the
-        input list is included in the recording filenames
+        This function compute the  correlation matrix for the cell traces.
 
         Parameters
         ----------
-        strlist : list
-            List of strings to check
-        only_warning: bool, optional
-            If False, throw an exception. Default, True.
+        cellsetname : str
+            cell label to get filename
+        verbose : bool, optional
+            Show additional messages, by default False
 
-         Returns
+        Returns
         -------
-        None
-
+        pd.DataFrame
+            DataFrame with the correlation matrix
         """
-        for x, y in zip(strlist, self.rec_paths):
-            if only_warning and x not in y:
-                print(f"Warning: {x} not in {y}")
-            else:
-                assert x in y, f"Error {x} not in {y}"
+
+
+        cell_set_files = fh.get_results_filenames(
+            f"{cellsetname}", op=None, single_plane=False
+        )
+        corr_files = fh.get_results_filenames(
+        f"{cellsetname}_corr.csv", op=None, single_plane=False
+        )
+        return compute_traces_corr(cell_set_files,corr_files,verbose=verbose)
 
     def get_results_filenames(
         self,
@@ -624,10 +630,10 @@ class isx_files_handler:
             parameters[key] = value
 
         if self.processing_steps.index(op) == 0:  # deinterleave needed
-            de_interleave(
-                focus_files=self.focus_files, efocus=self.efocus
-            )
-
+            pb = progress_bar(len(self.focus_files), "Deinterleaving")
+            for (main_file, planes_fs), focus in zip(self.focus_files.items(), self.efocus):
+                de_interleave(main_file, planes_fs, focus)
+                pb.update_progress_bar(1)
         if op.startswith("PP") or op.startswith("BP") or op.startswith("MC") or op.startswith("DFF"):
             pb = progress_bar(amount_of_files,f_message[operation])
             for input, output in pairlist:
@@ -1235,79 +1241,7 @@ class isx_files_handler:
         print(f"Current total execution time {timedelta(seconds=cls.total_time)}")
 
 
-def de_interleave(focus_files: dict, efocus: list, overwrite: bool = False) -> None:
-    """
-    This function applies the isx.de_interleave function, which de-interleaves multiplane movies
 
-    Parameters
-    ----------
-    overwrite : Bool, optional
-        If True the function erases the previous information; otherwise, it appends to a list.
-        By default "False"
-
-    Returns
-    -------
-    None
-
-    """
-
-    # Initialize progress bar
-    pb = progress_bar(len(focus_files), "Deinterleaving")
-    output_files = []
-    for (main_file, planes_fs), focus in zip(focus_files.items(), efocus):
-        if len(focus) > 1:  # has multiplane
-            existing_files = []
-            for sp_file in planes_fs:
-                dirname = os.path.dirname(sp_file)
-                json_file = os.path.splitext(sp_file)[0] + ".json"
-                if os.path.exists(sp_file):
-                    if overwrite:
-                        os.remove(sp_file)
-                        if os.path.exists(json_file):
-                            os.remove(json_file)
-                    else:
-                        if same_json_or_remove(
-                            parameters={
-                                "input_movie_files": main_file,
-                                "output_movie_files": [
-                                    os.path.basename(p) for p in planes_fs
-                                ],
-                                "in_efocus_values": focus,
-                            },
-                            input_files_keys=["input_movie_files"],
-                            output=sp_file,
-                            verbose=False,
-                        ):
-                            existing_files.append(sp_file)
-            if len(existing_files) != len(planes_fs):  # has files to run
-                for f in existing_files:  # remove existing planes
-                    os.remove(f)
-                try:
-                    isx.de_interleave(main_file, planes_fs, focus)
-
-                except Exception as err:
-                    print("Reading: ", main_file)
-                    print("Writting: ", planes_fs)
-                    raise err
-
-            data = {
-                "input_movie_files": main_file,
-                "output_movie_files": [os.path.basename(p) for p in planes_fs],
-                "in_efocus_values": focus,
-            }
-            # for sp_file in planes_fs:
-            write_log_file(
-                params=data,
-                dir_name=dirname,
-                input_files_keys=["input_movie_files"],
-                output_file_key="output_movie_files",
-            )
-
-        # Update progress bar
-        pb.update_progress_bar(1)
-        output_files += planes_fs
-
-    return
 
 def trim_movie(
     pairlist: Tuple[list, list],
@@ -1379,73 +1313,6 @@ def trim_movie(
         )
         # Update progress bar
         pb.update_progress_bar(1)
-
-
-def create_dff(
-    pairlist: Tuple[list, list],
-    parameters: dict,
-    amount_of_files: int,
-    overwrite=False,
-    verbose=False,
-    **kws,
-) -> None:
-    """
-    This function applies isx.dff function, to compute the DF/F movies.
-
-    Parameters
-    ----------
-    overwrite : bool, optional
-        Remove results and recompute them, by default False
-    verbose : bool, optional
-        Show additional messages, by default False
-
-    Returns
-    -------
-    None
-
-    """
-    # Initialize progress bar
-    pb = progress_bar(amount_of_files, "Normalizing via DF/F0")
-
-    if overwrite:
-        for input, output in zip(pairlist):
-            remove_file_and_json(output)
-
-    for key, value in kws.items():
-        assert key in parameters, f"The parameter: {key} does not exist"
-        parameters[key] = value
-
-    for input, output in pairlist:
-        new_data = {
-            "input_movie_files": os.path.basename(input),
-            "output_movie_files": os.path.basename(output),
-        }
-        parameters.update(new_data)
-        if same_json_or_remove(
-            parameters,
-            input_files_keys=["input_movie_files"],
-            output=output,
-            verbose=verbose,
-        ):
-            continue
-        isx.dff(
-            **parameters_for_isx(
-                parameters,
-                ["comments"],
-                {"input_movie_files": input, "output_movie_files": output},
-            )
-        )
-        write_log_file(
-            parameters,
-            os.path.dirname(output),
-            {"function": "dff"},
-            input_files_keys=["input_movie_files"],
-            output_file_key="output_movie_files",
-        )
-        # Update progress bar
-        pb.update_progress_bar(1)
-    print("done")
-
 
 def project_movie(
     pairlist: Tuple[list, list],
@@ -1520,31 +1387,3 @@ def project_movie(
         # Update progress bar
         pb.update_progress_bar(1)
     print("done")
-
-
-
-
-def get_efocus(gpio_file: str) -> list:
-    """
-    Read the gpio set from a file and get the data associated.
-
-    Parameters
-    ----------
-    gpio_file : str
-        path
-
-    Returns
-    -------
-    list
-        list with the video_efocus
-
-    """
-    gpio_set = isx.GpioSet.read(gpio_file)
-    efocus_values = gpio_set.get_channel_data(gpio_set.channel_dict["e-focus"])[1]
-    efocus_values, efocus_counts = np.unique(efocus_values, return_counts=True)
-    min_frames_per_efocus = 100
-    video_efocus = efocus_values[efocus_counts >= min_frames_per_efocus]
-    assert (
-        video_efocus.shape[0] < 4
-    ), f"{gpio_file}: Too many efocus detected, early frames issue."
-    return [int(v) for v in video_efocus]

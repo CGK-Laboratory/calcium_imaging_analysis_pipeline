@@ -259,3 +259,70 @@ def isx_dff(input, output, parameters, verbose) -> None:
         output_file_key="output_movie_files",
     )
 
+
+def de_interleave(main_file, planes_fs, focus, overwrite: bool = False) -> None:
+    """
+    This function applies the isx.de_interleave function, which de-interleaves multiplane movies
+
+    Parameters
+    ----------
+    overwrite : Bool, optional
+        If True the function erases the previous information; otherwise, it appends to a list.
+        By default "False"
+
+    Returns
+    -------
+    None
+
+    """
+
+    # Initialize progress bar
+    if len(focus) > 1:  # has multiplane
+        existing_files = []
+        for sp_file in planes_fs:
+            dirname = os.path.dirname(sp_file)
+            json_file = os.path.splitext(sp_file)[0] + ".json"
+            if os.path.exists(sp_file):
+                if overwrite:
+                    os.remove(sp_file)
+                    if os.path.exists(json_file):
+                        os.remove(json_file)
+                else:
+                    if same_json_or_remove(
+                        parameters={
+                            "input_movie_files": main_file,
+                            "output_movie_files": [
+                                os.path.basename(p) for p in planes_fs
+                            ],
+                            "in_efocus_values": focus,
+                        },
+                        input_files_keys=["input_movie_files"],
+                        output=sp_file,
+                        verbose=False,
+                    ):
+                        existing_files.append(sp_file)
+        if len(existing_files) != len(planes_fs):  # has files to run
+            for f in existing_files:  # remove existing planes
+                os.remove(f)
+            try:
+                isx.de_interleave(main_file, planes_fs, focus)
+
+            except Exception as err:
+                print("Reading: ", main_file)
+                print("Writting: ", planes_fs)
+                raise err
+
+        data = {
+            "input_movie_files": main_file,
+            "output_movie_files": [os.path.basename(p) for p in planes_fs],
+            "in_efocus_values": focus,
+        }
+        # for sp_file in planes_fs:
+        write_log_file(
+            params=data,
+            dir_name=dirname,
+            input_files_keys=["input_movie_files"],
+            output_file_key="output_movie_files",
+        )
+
+    return
