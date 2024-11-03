@@ -2,8 +2,62 @@ import isx
 import numpy as np
 import os
 from typing import Iterable
+import warnings
+from pathlib import Path
+import shutil
+def ifstr2list(x) -> list:
+    if isinstance(x, list):
+        return x
+    return [x]
 
-def get_efocus(gpio_file: str) -> list:
+
+def get_efocus(file,outputfolder,video):
+# Lookig for multiplanes:
+    raw_gpio_file = (
+        os.path.splitext(file)[0] + ".gpio"
+    )  
+    # raw data for gpio
+    updated_gpio_file = (
+        os.path.splitext(file)[0] + "_gpio.isxd"
+    )  # after the first reading gpio is converted to this
+    local_updated_gpio_file = os.path.join(
+        outputfolder,
+        Path(updated_gpio_file).name,
+    )  # new gpio copied in output
+    if os.path.exists(local_updated_gpio_file):
+        efocus = get_efocus_from_gpio(local_updated_gpio_file)
+    elif os.path.exists(updated_gpio_file):
+        efocus = get_efocus_from_gpio(updated_gpio_file)
+    elif os.path.exists(raw_gpio_file):
+        local_raw_gpio_file = os.path.join(
+            outputfolder,
+            Path(raw_gpio_file).name,
+        )
+        shutil.copy2(raw_gpio_file, local_raw_gpio_file)
+        efocus = get_efocus_from_gpio(local_raw_gpio_file)
+    else:
+        get_acquisition_info = video.get_acquisition_info().copy()
+        if "Microscope Focus" in get_acquisition_info:
+            if not isx.verify_deinterleave(
+                file, get_acquisition_info["Microscope Focus"]
+            ):
+                warnings.warn(
+                    f"Info {file}: Multiple Microscope Focus but not gpio file",
+                    Warning,
+                )
+                efocus = [0]
+            else:
+                efocus = [get_acquisition_info["Microscope Focus"]]
+        else:
+            efocus = [0]
+            print(
+                f"Info: Unable to verify Microscope Focus config in: {file}"
+            )
+    return efocus
+
+
+
+def get_efocus_from_gpio(gpio_file: str) -> list:
     """
     Read the gpio set from a file and get the data associated.
 

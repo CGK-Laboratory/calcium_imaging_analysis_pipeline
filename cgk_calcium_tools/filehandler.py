@@ -1,13 +1,13 @@
 import copy
 import os
 from pathlib import Path
+import shutil
+
 from glob import glob
-import warnings
 import numpy as np
 import isx
 import json
 from typing import Union, Tuple
-import shutil
 import pandas as pd
 from .files_io import (
     write_log_file,
@@ -24,15 +24,10 @@ from .isx_aux_functions import (
     create_empty_cellset,
     create_empty_events,
     get_efocus,
+    ifstr2list,
 )
 from .pipeline_functions import f_register, f_message, de_interleave
 from .analysis_utils import compute_traces_corr
-
-
-def ifstr2list(x) -> list:
-    if isinstance(x, list):
-        return x
-    return [x]
 
 
 def timer(method):
@@ -246,48 +241,12 @@ class isx_files_handler:
                         )
                         metadata[file]["recording_labels"] = next(recording_labels_iter)
 
-                    # Lookig for multiplanes:
+                    
                     for ofolder in metadata[file]["outputsfolders"]:
                         os.makedirs(ofolder, exist_ok=True)
-                    raw_gpio_file = (
-                        os.path.splitext(file)[0] + ".gpio"
-                    )  # raw data for gpio
-                    updated_gpio_file = (
-                        os.path.splitext(file)[0] + "_gpio.isxd"
-                    )  # after the first reading gpio is converted to this
-                    local_updated_gpio_file = os.path.join(
-                        metadata[file]["outputsfolders"][0],
-                        Path(updated_gpio_file).name,
-                    )  # new gpio copied in output
-                    if os.path.exists(local_updated_gpio_file):
-                        efocus = get_efocus(local_updated_gpio_file)
-                    elif os.path.exists(updated_gpio_file):
-                        efocus = get_efocus(updated_gpio_file)
-                    elif os.path.exists(raw_gpio_file):
-                        local_raw_gpio_file = os.path.join(
-                            metadata[file]["outputsfolders"][0],
-                            Path(raw_gpio_file).name,
-                        )
-                        shutil.copy2(raw_gpio_file, local_raw_gpio_file)
-                        efocus = get_efocus(local_raw_gpio_file)
-                    else:
-                        get_acquisition_info = video.get_acquisition_info().copy()
-                        if "Microscope Focus" in get_acquisition_info:
-                            if not isx.verify_deinterleave(
-                                file, get_acquisition_info["Microscope Focus"]
-                            ):
-                                warnings.warn(
-                                    f"Info {file}: Multiple Microscope Focus but not gpio file",
-                                    Warning,
-                                )
-                                efocus = [0]
-                            else:
-                                efocus = [get_acquisition_info["Microscope Focus"]]
-                        else:
-                            efocus = [0]
-                            print(
-                                f"Info: Unable to verify Microscope Focus config in: {file}"
-                            )
+                    
+                    efocus = get_efocus(file,metadata[file]["outputsfolders"][0],video)
+                    
                     video.flush()
                     del video  # usefull for windows
 
