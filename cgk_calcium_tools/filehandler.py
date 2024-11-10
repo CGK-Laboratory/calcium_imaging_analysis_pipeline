@@ -27,7 +27,7 @@ from .isx_aux_functions import (
     ifstr2list,
 )
 from .pipeline_functions import f_register, f_message, de_interleave
-from .analysis_utils import compute_traces_corr
+from .analysis_utils import apply_reject_criteria, compute_metrics
 
 
 def timer(method):
@@ -399,7 +399,19 @@ class isx_files_handler:
             outputs.append(str(Path(ofolder, Path(file).stem + suffix_out)))
         return outputs
 
-    def compute_traces_corr(fh, cellsetname: str, verbose=False) -> pd.DataFrame:
+    def apply_reject_criteria(self, cellsetname: str, verbose=False) -> pd.DataFrame:
+        cell_set_files = self.get_results_filenames(
+            f"{cellsetname}", op=None, single_plane=False
+        )
+        metrics_files = self.get_results_filenames(
+            f"{cellsetname}-ED_metrics.csv", op=None, single_plane=False
+        )
+        status_files = self.get_results_filenames(
+            f"{cellsetname}-ED_metrics.csv", op=None, single_plane=False
+        )
+        return apply_reject_criteria(cell_set_files, metrics_files,status_files, verbose=verbose)
+
+    def compute_metrics(self, cellsetname: str, verbose=False) -> pd.DataFrame:
         """
         This function compute the  correlation matrix for the cell traces.
 
@@ -416,13 +428,20 @@ class isx_files_handler:
             DataFrame with the correlation matrix
         """
 
-        cell_set_files = fh.get_results_filenames(
+        cell_set_files = self.get_results_filenames(
             f"{cellsetname}", op=None, single_plane=False
         )
-        corr_files = fh.get_results_filenames(
-            f"{cellsetname}_corr.csv", op=None, single_plane=False
+        
+        ed_files = self.get_results_filenames(
+            f"{cellsetname}-ED", op=None, single_plane=False
         )
-        return compute_traces_corr(cell_set_files, corr_files, verbose=verbose)
+        metrics_files = self.get_results_filenames(
+            f"{cellsetname}-ED_metrics.csv", op=None, single_plane=False
+        ) #it depends on event detection
+
+        # TODO: it could be merge with recording_labels
+        return compute_metrics(cell_set_files, ed_files, metrics_files, verbose=verbose)
+
 
     def get_results_filenames(
         self,
