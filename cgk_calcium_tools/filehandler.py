@@ -27,7 +27,7 @@ from .isx_aux_functions import (
     ifstr2list,
 )
 from .pipeline_functions import f_register, f_message, de_interleave
-from .analysis_utils import apply_reject_criteria, compute_metrics
+from .analysis_utils import apply_quality_criteria, compute_metrics
 
 
 def timer(method):
@@ -241,12 +241,13 @@ class isx_files_handler:
                         )
                         metadata[file]["recording_labels"] = next(recording_labels_iter)
 
-                    
                     for ofolder in metadata[file]["outputsfolders"]:
                         os.makedirs(ofolder, exist_ok=True)
-                    
-                    efocus = get_efocus(file,metadata[file]["outputsfolders"][0],video)
-                    
+
+                    efocus = get_efocus(
+                        file, metadata[file]["outputsfolders"][0], video
+                    )
+
                     video.flush()
                     del video  # usefull for windows
 
@@ -399,7 +400,15 @@ class isx_files_handler:
             outputs.append(str(Path(ofolder, Path(file).stem + suffix_out)))
         return outputs
 
-    def apply_reject_criteria(self, cellsetname: str, verbose=False) -> pd.DataFrame:
+    def apply_quality_criteria(
+        self,
+        cellsetname: str,
+        max_corr=0.9,
+        min_skew=0.05,
+        only_isx_accepted=True,
+        overwrite=False,
+        verbose=False
+    ) -> pd.DataFrame:
         cell_set_files = self.get_results_filenames(
             f"{cellsetname}", op=None, single_plane=False
         )
@@ -409,7 +418,14 @@ class isx_files_handler:
         status_files = self.get_results_filenames(
             f"{cellsetname}-ED_metrics.csv", op=None, single_plane=False
         )
-        return apply_reject_criteria(cell_set_files, metrics_files,status_files, verbose=verbose)
+        return apply_quality_criteria(
+            cell_set_files, metrics_files, status_files, 
+            max_corr=max_corr,
+            min_skew=min_skew,
+            only_isx_accepted=only_isx_accepted,
+            overwrite=overwrite,
+            verbose=verbose
+        )
 
     def compute_metrics(self, cellsetname: str, verbose=False) -> pd.DataFrame:
         """
@@ -431,17 +447,16 @@ class isx_files_handler:
         cell_set_files = self.get_results_filenames(
             f"{cellsetname}", op=None, single_plane=False
         )
-        
+
         ed_files = self.get_results_filenames(
             f"{cellsetname}-ED", op=None, single_plane=False
         )
         metrics_files = self.get_results_filenames(
             f"{cellsetname}-ED_metrics.csv", op=None, single_plane=False
-        ) #it depends on event detection
+        )  # it depends on event detection
 
         # TODO: it could be merge with recording_labels
         return compute_metrics(cell_set_files, ed_files, metrics_files, verbose=verbose)
-
 
     def get_results_filenames(
         self,

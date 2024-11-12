@@ -19,46 +19,97 @@ from .jupyter_outputs import progress_bar
 from time import perf_counter
 from datetime import timedelta
 
-from .analysis_utils import apply_reject_criteria
+from .analysis_utils import apply_quality_criteria, compute_metrics
 from typing import Union
 from .isxp_reader import get_parent_and_file
 
+
 class isx_prj_handler:
-    def __init__(self, main_folder:str, filter:str='', events_name:str='Events'):
+    def __init__(self, main_folder: str, filter: str = "", events_name: str = "Events"):
         self.projects = []
         self.cellsets = []
         self.events = []
         manual_isx_files = glob.glob(f"{main_folder}/**/*.isxp", recursive=True)
 
         for isxp_file in manual_isx_files:
-            if filter not in isxp_file[len(main_folder)+1:]:
+            if filter not in isxp_file[len(main_folder) + 1 :]:
                 continue
             with open(isxp_file, "r") as f:
                 s = f.read()
             try:
-                parsed_project=json.loads(s)
+                parsed_project = json.loads(s)
             except:
-                parsed_project=json.loads(s[0:-1])
-            res= get_parent_and_file(parsed_project,'name', events_name)
+                parsed_project = json.loads(s[0:-1])
+            res = get_parent_and_file(parsed_project, "name", events_name)
             if res in None:
                 continue
             self.projects.append(isxp_file)
-            self.cellsets.append(os.path.join(os.path.dirname(isxp_file),res[0]))
-            self.events.append(os.path.join(os.path.dirname(isxp_file),res[1]))
-    
-    def create_outputname(self, ending:str, from_cellset:bool=False) -> str:
+            cellsetfile = os.path.join(os.path.dirname(isxp_file), res[0])
+            eventsfile = os.path.join(os.path.dirname(isxp_file), res[1])
+            if not os.path.exists(cellsetfile):
+                raise Exception(f"Error!!: File {cellsetfile} not exists")
+            if not os.path.exists(eventsfile):
+                raise Exception(f"Error!!: File {eventsfile} not exists")
+            self.cellsets.append(cellsetfile)
+            self.events.append(eventsfile)
+
+    def get_events(self, cells_used="accepted"):
+        assert cells_used in ["accepted", "isx_accepted", "all"]
+        data = []
+
+        for cellset, events in self.cellsets, self.events:
+            if cells_used == "accepted":
+                status_files = self.create_outputname("_status.csv", from_cellset=False)
+                if not os.path.exists(status_files):
+                    raise Exception(
+                        f"Error!!: Run the method apply_quality_criteria before get_events"
+                    )
+                metrics = pd.read_csv(status_files, index_col=0)
+            cs = isx.CellSet.read(cellset)
+            es = isx.EventSet.read(events)
+            cs_names = [cs.get_cell_name(i) for i in range(cs.num_cells)]
+            for c in range(es.num_cells):
+                cellname = es.get_cell_name(c)
+                if (
+                    cells_used == "isx_accepted"
+                    and cs.get_cell_status(cs_names.index(cellname)) == "accepted"
+                ):
+                    continue
+                elif (
+                    cells_used == "accepted" and metrics.loc[cellname, "corr_accepted"]
+                ):
+                    continue
+                data.append(
+                    {
+                        "Events (s)": es.get_cell_data(c)[0] / 1e6,
+                        "File": events,
+                        "Duration (s)": cs.timing.num_samples
+                        * cs.timing.period.to_usecs()
+                        / 1e6,
+                        "cell_name": cellname,
+                    }
+                )
+
+    def create_outputname(self, ending: str, from_cellset: bool = False) -> str:
+
         out = []
         if from_cellset:
             iter = self.cellsets
         else:
             iter = self.events
         for f in iter:
-            out.append(f.with_suffix("")+'ending')
+            out.append(f.with_suffix("") + ending)
         return out
-    
-    def apply_reject_criteria(self, verbose=False) -> pd.DataFrame:
+
+    def apply_quality_criteria(
+        self,
+        max_corr=0.9,
+        min_skew=0.05,
+        only_isx_accepted=True,
+        overwrite=False,
+        verbose=False,
+    ) -> pd.DataFrame:
         """
-        This function compute the  correlation matrix for the cell traces.
 
         Parameters
         ----------
@@ -72,9 +123,17 @@ class isx_prj_handler:
         """
         metric_files = self.create_outputname("_metrics.csv", from_cellset=False)
         status_files = self.create_outputname("_status.csv", from_cellset=False)
-        return apply_reject_criteria(self.cellsets, metric_files, status_files, verbose=verbose)
+        return apply_quality_criteria(
+            self.cellsets,
+            metric_files,
+            status_files,
+            max_corr=max_corr,
+            min_skew=min_skew,
+            only_isx_accepted=only_isx_accepted,
+            overwrite=overwrite,
+            verbose=verbose,
+        )
 
-     
     def compute_metrics(self, verbose=False) -> pd.DataFrame:
         """
         This function compute the  correlation matrix for the cell traces.
@@ -92,7 +151,6 @@ class isx_prj_handler:
 
         metric_files = self.create_outputname("_metrics.csv", from_cellset=False)
 
-        return apply_reject_criteria(self.cellsets, self.events, metric_files, verbose=verbose)
-
-
-    
+        return compute_metrics(
+            self.cellsets, self.events, metric_files, verbose=verbose
+        )

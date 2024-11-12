@@ -6,7 +6,7 @@ import os
 from .files_io import write_log_file, same_json_or_remove, parameters_for_isx
 from scipy.stats import skew
 
-def apply_reject_criteria(cell_set_files: list, metric_files: list, status_files: list,
+def apply_quality_criteria(cell_set_files: list, metric_files: list, status_files: list,
                           max_corr=0.9, min_skew = 0.05, only_isx_accepted=True,overwrite=False, verbose=False) -> None:
     
     """
@@ -40,6 +40,8 @@ def apply_reject_criteria(cell_set_files: list, metric_files: list, status_files
             "input_cell_set_file": os.path.basename(cellset),
             "input_metric_file": os.path.basename(cellset),
             "output_status_file": os.path.basename(status_file),
+            "max_corr":max_corr,
+            "min_skew":min_skew
         }
         
         if overwrite and os.path.exists(status_file):
@@ -50,6 +52,7 @@ def apply_reject_criteria(cell_set_files: list, metric_files: list, status_files
             output=status_file,
             verbose=verbose,
             input_files_keys=input_files,
+            
         ):
             continue
         cs = isx.CellSet.read(cellset)
