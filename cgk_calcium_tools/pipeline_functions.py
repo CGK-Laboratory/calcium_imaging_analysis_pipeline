@@ -1,0 +1,378 @@
+import isx
+from typing import Union,  Tuple
+from .processing import fix_frames
+from typing import Callable
+from .files_io import (
+    write_log_file,
+    same_json_or_remove,
+    parameters_for_isx,
+)
+import os
+import numpy as np
+f_register: dict[str, Callable] = {}
+f_message: dict[str, str] = {}
+def register(name: Union[str, list], message=None) -> None:
+    
+    if message is None:
+        message = f"Running function: {name}"
+
+    def decorator(func: Callable) -> None:
+        assert isinstance(func, Callable)
+        if  isinstance(name, list):            
+            for n in name:
+                f_register[n] = func
+                f_message[n] = message
+        else:
+            f_register[name] = func
+            f_message[name] = message
+    return decorator
+
+        
+@register(['isx:spatial_filter', "spatial_filter"],"Preprocessing")
+def isx_spatial_filter(input, output, parameters, verbose) -> None:
+    """
+    Applies spatial bandpass filtering to each frame of one or more movies
+
+    Parameters
+    ----------
+    parameters : dict
+        Parameter dictionary of executed functions.
+    verbose : bool, optional
+        Show additional messages, by default False
+    Returns
+    -------
+    None
+
+    """
+
+    parameters_rel = parameters.copy()
+    parameters_rel.update(
+        {
+            "input_movie_files": os.path.basename(parameters["input_movie_files"]),
+            "output_movie_files": os.path.basename(parameters["output_movie_files"])
+        }
+    )
+
+
+    if same_json_or_remove(
+        parameters_rel,
+        input_files_keys=["input_movie_files"],
+        output=parameters["output_movie_files"],
+        verbose=verbose,
+    ):
+        return
+    isx.spatial_filter(
+        **parameters_for_isx(
+            parameters,
+            ["comments"],
+            {"input_movie_files": input, "output_movie_files": output},
+        )
+    )
+    write_log_file(
+        parameters_rel,
+        os.path.dirname(output),
+        {"function": "spatial_filter"},
+        input_files_keys=["input_movie_files"],
+        output_file_key="output_movie_files",
+    )
+    if verbose:
+        print("{} bandpass filtering completed".format(output))
+
+
+
+@register(['isx:motion_correct', "motion_correct"],"Applying Motion Correction to")
+def isx_motion_correct(input, output, parameters, verbose) -> None:
+    """
+    After checks, use the isx.motion_correct function, which motion correct movies to a reference frame.
+
+    Parameters
+    ----------
+    parameters : dict
+       Parameter list of executed functions.
+    verbose : bool, optional
+        Show additional messages, by default False
+
+    Returns
+    -------
+    None
+
+    Examples
+    --------
+    """
+    # Initialize progress bar
+
+    translation_file = os.path.splitext(output)[0] + "-translations.csv"
+    crop_rect_file = os.path.splitext(output)[0] + "-crop_rect.csv"
+
+    new_data = {
+        "input_movie_files": os.path.basename(input),
+        "output_movie_files": os.path.basename(output),
+        "output_translation_files": os.path.basename(translation_file),
+        "output_crop_rect_file": os.path.basename(crop_rect_file),
+    }
+    parameters.update(new_data)
+    if same_json_or_remove(
+        parameters,
+        input_files_keys=["input_movie_files"],
+        output=output,
+        verbose=verbose,
+    ):
+        return
+    isx.motion_correct(
+        **parameters_for_isx(
+            parameters,
+            ["comments"],
+            {
+                "input_movie_files": input,
+                "output_movie_files": output,
+                "output_translation_files": translation_file,
+                "output_crop_rect_file": crop_rect_file,
+            },
+        )
+    )
+    write_log_file(
+        parameters,
+        os.path.dirname(output),
+        {"function": "motion_correct"},
+        input_files_keys=["input_movie_files"],
+        output_file_key="output_movie_files",
+    )
+
+    if verbose:
+        print("{} motion correction completed".format(output))
+
+
+@register(['isx:preprocessing', "preprocessing"],"Applying Bandpass Filter to")
+def isx_preprocessing(input, output, parameters, verbose) -> None:
+    """
+    After performing checks, use the isx.preprocess function, which preprocesses movies,
+    optionally applying spatial and temporal downsampling and cropping.
+
+    Parameters
+    ----------
+
+    parameters : dict
+       Parameter dictionary of executed functions.
+    verbose : bool, optional
+        Show additional messages, by default False
+
+    Returns
+    -------
+    None
+
+    """
+    if isinstance(parameters["spatial_downsample_factor"], str):
+        res_idx, value = parameters["spatial_downsample_factor"].split("_")
+        if res_idx == "maxHeight":
+            idx_resolution = 0
+        elif res_idx == "maxWidth":
+            idx_resolution = 1
+        else:
+            assert False, "error in sp_downsampling parameter value"
+        movie = isx.Movie.read(input)
+        resolution = movie.spacing.num_pixels
+        del movie
+        parameters["spatial_downsample_factor"] = np.ceil(
+            resolution[idx_resolution] / float(value)
+        )
+
+    parameters.update(
+        {
+            "input_movie_files": os.path.basename(input),
+            "output_movie_files": os.path.basename(output),
+        }
+    )
+
+    if same_json_or_remove(
+        parameters,
+        input_files_keys=["input_movie_files"],
+        output=output,
+        verbose=verbose,
+    ):
+        return
+
+    isx.preprocess(
+        **parameters_for_isx(
+            parameters,
+            ["comments", "fix_frames_th_std"],
+            {"input_movie_files": input, "output_movie_files": output},
+        )
+    )
+
+    nfixed = fix_frames(output, std_th=parameters["fix_frames_th_std"], report=True)
+
+    write_log_file(
+        parameters,
+        os.path.dirname(output),
+        {"function": "preprocess"},
+        input_files_keys=["input_movie_files"],
+        output_file_key="output_movie_files",
+    )
+    if verbose:
+        print("{} preprocessing completed. {} frames fixed.".format(output, nfixed))
+
+
+
+@register(['isx:dff', "dff"],"Normalizing via DF/F0")
+def isx_dff(input, output, parameters, verbose) -> None:
+
+    """
+    This function applies isx.dff function, to compute the DF/F movies.
+
+    Parameters
+    ----------
+    overwrite : bool, optional
+        Remove results and recompute them, by default False
+    verbose : bool, optional
+        Show additional messages, by default False
+
+    Returns
+    -------
+    None
+
+    """
+    
+    new_data = {
+        "input_movie_files": os.path.basename(input),
+        "output_movie_files": os.path.basename(output),
+    }
+    parameters.update(new_data)
+    if same_json_or_remove(
+        parameters,
+        input_files_keys=["input_movie_files"],
+        output=output,
+        verbose=verbose,
+    ):
+        return
+    isx.dff(
+        **parameters_for_isx(
+            parameters,
+            ["comments"],
+            {"input_movie_files": input, "output_movie_files": output},
+        )
+    )
+    write_log_file(
+        parameters,
+        os.path.dirname(output),
+        {"function": "dff"},
+        input_files_keys=["input_movie_files"],
+        output_file_key="output_movie_files",
+    )
+
+
+@register(['isx:project_movie', "project_movie"],"Projecting Movies")
+def project_movie(input, output, parameters: dict, verbose:bool=False) -> None:
+    """
+    This function applies isx.project_movie to project movies to a single statistic image.
+
+    Parameters
+    ----------
+    overwrite : bool, optional
+        Remove results and recompute them, by default False
+    verbose : bool, optional
+        Show additional messages, by default False
+
+    Returns
+    -------
+    None
+
+    """
+    new_data = {
+        "input_movie_files": os.path.basename(input),
+        "output_image_file": os.path.basename(output),
+    }
+    parameters.update(new_data)
+    if same_json_or_remove(
+        parameters,
+        input_files_keys=["input_movie_files"],
+        output=output,
+        verbose=verbose,
+    ):
+        return
+    isx.project_movie(
+        **parameters_for_isx(
+            parameters,
+            ["comments"],
+            {"input_movie_files": input, "output_image_file": output},
+        )
+    )
+    write_log_file(
+        parameters,
+        os.path.dirname(output),
+        {"function": "project_movie"},
+        input_files_keys=["input_movie_files"],
+        output_file_key="output_image_file",
+    )
+
+
+
+
+
+
+
+def de_interleave(main_file, planes_fs, focus, overwrite: bool = False) -> None:
+    """
+    This function applies the isx.de_interleave function, which de-interleaves multiplane movies
+
+    Parameters
+    ----------
+    overwrite : Bool, optional
+        If True the function erases the previous information; otherwise, it appends to a list.
+        By default "False"
+
+    Returns
+    -------
+    None
+
+    """
+
+    # Initialize progress bar
+    if len(focus) > 1:  # has multiplane
+        existing_files = []
+        for sp_file in planes_fs:
+            dirname = os.path.dirname(sp_file)
+            json_file = os.path.splitext(sp_file)[0] + ".json"
+            if os.path.exists(sp_file):
+                if overwrite:
+                    os.remove(sp_file)
+                    if os.path.exists(json_file):
+                        os.remove(json_file)
+                else:
+                    if same_json_or_remove(
+                        parameters={
+                            "input_movie_files": main_file,
+                            "output_movie_files": [
+                                os.path.basename(p) for p in planes_fs
+                            ],
+                            "in_efocus_values": focus,
+                        },
+                        input_files_keys=["input_movie_files"],
+                        output=sp_file,
+                        verbose=False,
+                    ):
+                        existing_files.append(sp_file)
+        if len(existing_files) != len(planes_fs):  # has files to run
+            for f in existing_files:  # remove existing planes
+                os.remove(f)
+            try:
+                isx.de_interleave(main_file, planes_fs, focus)
+
+            except Exception as err:
+                print("Reading: ", main_file)
+                print("Writting: ", planes_fs)
+                raise err
+
+        data = {
+            "input_movie_files": main_file,
+            "output_movie_files": [os.path.basename(p) for p in planes_fs],
+            "in_efocus_values": focus,
+        }
+        # for sp_file in planes_fs:
+        write_log_file(
+            params=data,
+            dir_name=dirname,
+            input_files_keys=["input_movie_files"],
+            output_file_key="output_movie_files",
+        )
+
+    return
