@@ -174,7 +174,7 @@ def compute_metrics(cell_set_files: list, ed_files: list, metrics_files: list, v
                     isx.cell_metrics(
                         **parameters_for_isx(
                             inputs_args,
-                            keys_to_remove="output_metrics_file",
+                            keys_to_remove=["output_metrics_file"],
                             to_update={
                                 "input_cell_set_files": cellset,
                                 "input_event_set_files": ed,
