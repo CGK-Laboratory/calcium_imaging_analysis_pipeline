@@ -101,7 +101,7 @@ class isx_prj_handler:
         else:
             iter = self.events
         for f in iter:
-            out.append(f.with_suffix("") + ending)
+            out.append(os.path.splitext(f)[0] + ending)
         return out
 
     def apply_quality_criteria(
