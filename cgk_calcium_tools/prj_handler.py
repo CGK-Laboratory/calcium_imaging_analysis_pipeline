@@ -6,6 +6,7 @@ import numpy as np
 import isx
 import json
 from typing import Union, Tuple
+
 import shutil
 import pandas as pd
 from .files_io import (
@@ -47,9 +48,11 @@ class isx_prj_handler:
             cellsetfile = os.path.join(os.path.dirname(isxp_file), res[0])
             eventsfile = os.path.join(os.path.dirname(isxp_file), res[1])
             if not os.path.exists(cellsetfile):
-                raise Exception(f"Error!!: File {cellsetfile} not exists")
+                warnings.warn("Warning: File {cellsetfile} not exists, omitted ", UserWarning)
+                continue
             if not os.path.exists(eventsfile):
-                raise Exception(f"Error!!: File {eventsfile} not exists")
+                warnings.warn("Warning: File {eventsfile} not exists, omitted ", UserWarning)
+                continue
             self.cellsets.append(cellsetfile)
             self.events.append(eventsfile)
 
