@@ -41,7 +41,7 @@ class isx_prj_handler:
             except:
                 parsed_project = json.loads(s[0:-1])
             res = get_parent_and_file(parsed_project, "name", events_name)
-            if res in None:
+            if res is None:
                 continue
             self.projects.append(isxp_file)
             cellsetfile = os.path.join(os.path.dirname(isxp_file), res[0])
