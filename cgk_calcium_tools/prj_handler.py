@@ -25,14 +25,14 @@ from .isxp_reader import get_parent_and_file
 
 
 class isx_prj_handler:
-    def __init__(self, main_folder: str, filter: str = "", events_name: str = "Events"):
+    def __init__(self, main_folder: str, str_filter: str = "", events_name: str = "Events"):
         self.projects = []
         self.cellsets = []
         self.events = []
-        manual_isx_files = glob.glob(f"{main_folder}/**/*.isxp", recursive=True)
+        manual_isx_files = glob(f"{main_folder}/**/*.isxp", recursive=True)
 
         for isxp_file in manual_isx_files:
-            if filter not in isxp_file[len(main_folder) + 1 :]:
+            if str_filter not in isxp_file[len(main_folder) + 1 :]:
                 continue
             with open(isxp_file, "r") as f:
                 s = f.read()
