@@ -182,7 +182,8 @@ def compute_metrics(cell_set_files: list, ed_files: list, metrics_files: list, v
                             },
                         )
                     )
-                raise(e)
+                else:
+                    raise(e)
             write_log_file(
                 inputs_args,
                 os.path.dirname(metric),
