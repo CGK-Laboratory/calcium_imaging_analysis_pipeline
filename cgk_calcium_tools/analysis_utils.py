@@ -169,7 +169,20 @@ def compute_metrics(cell_set_files: list, ed_files: list, metrics_files: list, v
                     )
                 )
             except Exception as e:
-                print(e)
+                code_medtris = isx.cell_metrics.__code__
+                if 'output_metrics_file' not in code_medtris.co_varnames[:code_medtris.co_argcount]: #patching for isx <1.9.4
+                    isx.cell_metrics(
+                        **parameters_for_isx(
+                            inputs_args,
+                            keys_to_remove="output_metrics_file",
+                            to_update={
+                                "input_cell_set_files": cellset,
+                                "input_event_set_files": ed,
+                                "output_metrics_files": metric,
+                            },
+                        )
+                    )
+                raise(e)
             write_log_file(
                 inputs_args,
                 os.path.dirname(metric),
