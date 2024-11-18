@@ -56,18 +56,23 @@ class isx_prj_handler:
             self.cellsets.append(cellsetfile)
             self.events.append(eventsfile)
 
+    def get_status(self):
+        data = []
+        status_files = self.create_outputname("_status.csv", from_cellset=False)
+        for events,statusf in zip(self.events,status_files):
+            df = pd.read_csv(statusf, index_col=0)
+            df['File'] = events
+            data.append(df)
+        return pd.concat(data)
+    
     def get_events(self, cells_used="accepted"):
         assert cells_used in ["accepted", "isx_accepted", "all"]
         data = []
 
-        for cellset, events in self.cellsets, self.events:
+        for cellset, events in zip(self.cellsets, self.events):
             if cells_used == "accepted":
-                status_files = self.create_outputname("_status.csv", from_cellset=False)
-                if not os.path.exists(status_files):
-                    raise Exception(
-                        f"Error!!: Run the method apply_quality_criteria before get_events"
-                    )
-                metrics = pd.read_csv(status_files, index_col=0)
+                status_file = os.path.splitext(events)[0] + "_status.csv"
+                status = pd.read_csv(status_file, index_col=0)               
             cs = isx.CellSet.read(cellset)
             es = isx.EventSet.read(events)
             cs_names = [cs.get_cell_name(i) for i in range(cs.num_cells)]
@@ -75,11 +80,11 @@ class isx_prj_handler:
                 cellname = es.get_cell_name(c)
                 if (
                     cells_used == "isx_accepted"
-                    and cs.get_cell_status(cs_names.index(cellname)) == "accepted"
+                    and cs.get_cell_status(cs_names.index(cellname)) != "accepted"
                 ):
                     continue
                 elif (
-                    cells_used == "accepted" and metrics.loc[cellname, "corr_accepted"]
+                    cells_used == "accepted" and not status.loc[cellname, "corr_accepted"]
                 ):
                     continue
                 data.append(
