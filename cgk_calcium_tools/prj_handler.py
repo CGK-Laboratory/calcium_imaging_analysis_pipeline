@@ -48,10 +48,10 @@ class isx_prj_handler:
             cellsetfile = os.path.join(os.path.dirname(isxp_file), res[0])
             eventsfile = os.path.join(os.path.dirname(isxp_file), res[1])
             if not os.path.exists(cellsetfile):
-                warnings.warn("Warning: File {cellsetfile} not exists, omitted ", UserWarning)
+                warnings.warn(f"Warning: File {cellsetfile} not exists, omitted ", UserWarning)
                 continue
             if not os.path.exists(eventsfile):
-                warnings.warn("Warning: File {eventsfile} not exists, omitted ", UserWarning)
+                warnings.warn(f"Warning: File {eventsfile} not exists, omitted ", UserWarning)
                 continue
             self.cellsets.append(cellsetfile)
             self.events.append(eventsfile)
@@ -84,7 +84,7 @@ class isx_prj_handler:
                 ):
                     continue
                 elif (
-                    cells_used == "accepted" and not status.loc[cellname, "corr_accepted"]
+                    cells_used == "accepted" and not status.loc[cellname, "corr_accepted"] or not status.loc[cellname, 'skew_accepted']
                 ):
                     continue
                 data.append(
