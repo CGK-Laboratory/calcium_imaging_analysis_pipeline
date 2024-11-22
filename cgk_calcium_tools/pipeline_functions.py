@@ -305,8 +305,66 @@ def project_movie(input, output, parameters: dict, verbose:bool=False) -> None:
     )
 
 
+@register(['isx:trim_movie','trim'],"Trimming")
+def trim_movie(
+    input, output,
+    user_parameters: dict,
+    verbose: bool = False,
+) -> None:
+    """
+    it invokes the isx.trim_movie function, which trims frames from a movie to generate a new movie
+
+    Parameters
+    ----------
+    verbose : bool, optional
+        Show additional messages, by default False
+
+    Returns
+    -------
+    None
+
+    """
+
+    assert (
+        user_parameters["video_len"] is not None
+    ), "Trim movie requires parameter video len"
 
 
+    parameters = {
+        "input_movie_file": os.path.basename(input),
+        "output_movie_file": os.path.basename(output),
+    }
+    movie = isx.Movie.read(input)
+    sr = 1 / (movie.timing.period.to_msecs() / 1000)
+    endframe = user_parameters["video_len"] * sr
+    maxfileframe = movie.timing.num_samples + 1
+    assert maxfileframe >= endframe, "max time > duration of the video"
+    parameters["video_len"] = user_parameters["video_len"]
+    if same_json_or_remove(
+        parameters,
+        input_files_keys=["input_movie_file"],
+        output=output,
+        verbose=verbose,
+    ):
+        return
+    parameters["crop_segments"] = [[endframe, maxfileframe]]
+    isx.trim_movie(
+        **parameters_for_isx(
+            parameters,
+            ["comments", "video_len"],
+            {"input_movie_file": input, "output_movie_file": output},
+        )
+    )
+    if verbose:
+        print("{} trimming completed".format(output))
+    del parameters["crop_segments"]
+    write_log_file(
+        parameters,
+        os.path.dirname(output),
+        {"function": "trimming"},
+        input_files_keys=["input_movie_file"],
+        output_file_key="output_movie_file",
+    )
 
 
 

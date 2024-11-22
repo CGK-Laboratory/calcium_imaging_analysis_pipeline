@@ -27,7 +27,7 @@ from .isx_aux_functions import (
     ifstr2list,
 )
 from .pipeline_functions import f_register, f_message, de_interleave
-from .analysis_utils import apply_quality_criteria, compute_metrics
+from .analysis_utils import apply_quality_criteria, compute_metrics,get_events
 
 
 def timer(method):
@@ -416,7 +416,7 @@ class isx_files_handler:
             f"{cellsetname}-ED_metrics.csv", op=None, single_plane=False
         )
         status_files = self.get_results_filenames(
-            f"{cellsetname}-ED_metrics.csv", op=None, single_plane=False
+            f"{cellsetname}-ED_status.csv", op=None, single_plane=False
         )
         return apply_quality_criteria(
             cell_set_files, metrics_files, status_files, 
@@ -426,6 +426,28 @@ class isx_files_handler:
             overwrite=overwrite,
             verbose=verbose
         )
+
+
+    def get_status(self, cellsetname: str):
+        data = []
+        status_files = self.get_results_filenames(f"{cellsetname}-ED_status.csv", op=None, single_plane=False)
+        for events,statusf in zip(self.events,status_files):
+            df = pd.read_csv(statusf, index_col=0)
+            df['File'] = events
+            data.append(df)
+        return pd.concat(data)
+        
+    def get_events(self, cellsetname: str, cells_used="accepted"):
+
+        event_det_files = self.get_results_filenames(
+            f"{cellsetname}-ED", op=None, single_plane=False
+        )
+        cellset_files = self.get_results_filenames(
+            f"{cellsetname}", op=None, single_plane=False
+        )
+        return get_events(cellset_files, event_det_files, cells_used="accepted")
+
+
 
     def compute_metrics(self, cellsetname: str, verbose=False) -> pd.DataFrame:
         """
@@ -635,14 +657,12 @@ class isx_files_handler:
             or op.startswith("MC")
             or op.startswith("DFF")
             or op.startswith("PM")
+            or op.startswith("TR")
         ):
             pb = progress_bar(amount_of_files, f_message[operation])
             for input, output in pairlist:
                 f_register[operation](input, output, parameters, verbose)
                 pb.update_progress_bar(1)
-        if op.startswith("TR"):
-            print("Trim movies, Please wait...")
-            trim_movie(pairlist, parameters, amount_of_files, verbose)
         print("done")
 
     @timer
@@ -1238,73 +1258,3 @@ class isx_files_handler:
         print(f"Current total execution time {timedelta(seconds=cls.total_time)}")
 
 
-def trim_movie(
-    pairlist: Tuple[list, list],
-    user_parameters: dict,
-    amount_of_files: int,
-    verbose: bool = False,
-) -> None:
-    """
-    After verifying that the user_parameters are correct and obtaining the maximum file frame,
-    it invokes the isx.trim_movie function, which trims frames from a movie to generate a new movie
-
-    Parameters
-    ----------
-    pairlist: Tuple[list, list]
-        Tuple containing lists of input and output paths
-    user_parameters : dict
-        Parameter of movie len.
-    verbose : bool, optional
-        Show additional messages, by default False
-
-    Returns
-    -------
-    None
-
-    """
-
-    assert (
-        user_parameters["video_len"] is not None
-    ), "Trim movie requires parameter video len"
-
-    # Initialize progress bar
-    pb = progress_bar(amount_of_files, "Trimming")
-
-    for input, output in pairlist:
-        parameters = {
-            "input_movie_file": os.path.basename(input),
-            "output_movie_file": os.path.basename(output),
-        }
-        movie = isx.Movie.read(input)
-        sr = 1 / (movie.timing.period.to_msecs() / 1000)
-        endframe = user_parameters["video_len"] * sr
-        maxfileframe = movie.timing.num_samples + 1
-        assert maxfileframe >= endframe, "max time > duration of the video"
-        parameters["video_len"] = user_parameters["video_len"]
-        if same_json_or_remove(
-            parameters,
-            input_files_keys=["input_movie_file"],
-            output=output,
-            verbose=verbose,
-        ):
-            continue
-        parameters["crop_segments"] = [[endframe, maxfileframe]]
-        isx.trim_movie(
-            **parameters_for_isx(
-                parameters,
-                ["comments", "video_len"],
-                {"input_movie_file": input, "output_movie_file": output},
-            )
-        )
-        if verbose:
-            print("{} trimming completed".format(output))
-        del parameters["crop_segments"]
-        write_log_file(
-            parameters,
-            os.path.dirname(output),
-            {"function": "trimming"},
-            input_files_keys=["input_movie_file"],
-            output_file_key="output_movie_file",
-        )
-        # Update progress bar
-        pb.update_progress_bar(1)
