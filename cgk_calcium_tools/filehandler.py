@@ -651,19 +651,12 @@ class isx_files_handler:
             ):
                 de_interleave(main_file, planes_fs, focus)
                 pb.update_progress_bar(1)
-        if (
-            op.startswith("PP")
-            or op.startswith("BP")
-            or op.startswith("MC")
-            or op.startswith("DFF")
-            or op.startswith("PM")
-            or op.startswith("TR")
-        ):
-            pb = progress_bar(amount_of_files, f_message[operation])
-            for input, output in pairlist:
-                f_register[operation](input, output, parameters, verbose)
-                pb.update_progress_bar(1)
-        print("done")
+
+        # Run the selected operation
+        pb = progress_bar(amount_of_files, f_message[operation])
+        for input, output in pairlist:
+            f_register[operation](input, output, parameters, verbose)
+            pb.update_progress_bar(1)
 
     @timer
     def extract_cells(

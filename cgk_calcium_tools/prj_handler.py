@@ -55,7 +55,9 @@ class isx_prj_handler:
                 continue
             self.cellsets.append(cellsetfile)
             self.events.append(eventsfile)
-
+            
+        if len(self.cellsets) == 0:
+            raise Exception("No isx files found")
     def get_status(self):
         data = []
         status_files = self.create_outputname("_status.csv", from_cellset=False)
