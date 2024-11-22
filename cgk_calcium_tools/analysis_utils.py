@@ -112,7 +112,7 @@ def apply_quality_criteria(cell_set_files: list, metric_files: list, status_file
                         metrics.loc[cell2rm,'corr_accepted'] = False
                         metrics.loc[cell2rm,'corr_rejected_by'] = good_cell
 
-
+        metrics['accepted'] = metrics['skew_accepted'] & metrics['corr_accepted']
         metrics.to_csv(status_file)
         write_log_file(
             inputs_args,
@@ -332,32 +332,36 @@ def get_cellset_info(fh, cellset_name="pca-ica") -> pd.DataFrame:
         )
     return pd.DataFrame(cellset_data).set_index("Recording Label")
 
+def get_events(cellset_files, event_det_files, cells_used="accepted"):
+    assert cells_used in ["accepted", "isx_accepted", "all"]
 
-def get_eventset(fh, cellsetname="pca-ica", accepted_only=True):
-
-    event_det_files = fh.get_results_filenames(
-        f"{cellsetname}-ED", op=None, single_plane=False
-    )
-    cellset_files = fh.get_results_filenames(
-        f"{cellsetname}", op=None, single_plane=False
-    )
-    labels = fh.recording_labels
-    events_df = []
-    for events, cellset, label in zip(event_det_files, cellset_files, labels):
-        ev = isx.EventSet.read(events)
+    data = []
+    for cellset, events in zip(cellset_files, event_det_files):
+        if cells_used == "accepted":
+            status_file = os.path.splitext(events)[0] + "_status.csv"
+            status = pd.read_csv(status_file, index_col=0)               
         cs = isx.CellSet.read(cellset)
-        for n in range(cs.num_cells):
-            if not accepted_only or cs.get_cell_status(n) == "accepted":
-                events_df.append(
-                    pd.DataFrame(
-                        {
-                            "Recording Label": label,
-                            "ed_file": events,
-                            "Time (us)": ev.get_cell_data(n)[0],
-                            "Amplitude": ev.get_cell_data(n)[1],
-                            "cell_name": ev.get_cell_name(n),
-                            "cell_status": cs.get_cell_status(n),
-                        }
-                    )
-                )
-    return pd.concat(events_df)
+        es = isx.EventSet.read(events)
+        cs_names = [cs.get_cell_name(i) for i in range(cs.num_cells)]
+        for c in range(es.num_cells):
+            cellname = es.get_cell_name(c)
+            if (
+                cells_used == "isx_accepted"
+                and cs.get_cell_status(cs_names.index(cellname)) != "accepted"
+            ):
+                continue
+            elif (
+                cells_used == "accepted" and not status.loc[cellname, "accepted"]
+            ):
+                continue
+            data.append(
+                {
+                    "Events (s)": es.get_cell_data(c)[0] / 1e6,
+                    "File": events,
+                    "Duration (s)": cs.timing.num_samples
+                    * cs.timing.period.to_usecs()
+                    / 1e6,
+                    "cell_name": cellname,
+                }
+            )
+    return pd.concat(data)

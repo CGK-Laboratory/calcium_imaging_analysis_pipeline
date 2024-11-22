@@ -20,7 +20,7 @@ from .jupyter_outputs import progress_bar
 from time import perf_counter
 from datetime import timedelta
 
-from .analysis_utils import apply_quality_criteria, compute_metrics
+from .analysis_utils import apply_quality_criteria, compute_metrics,get_events
 from typing import Union
 from .isxp_reader import get_parent_and_file
 
@@ -66,37 +66,7 @@ class isx_prj_handler:
         return pd.concat(data)
     
     def get_events(self, cells_used="accepted"):
-        assert cells_used in ["accepted", "isx_accepted", "all"]
-        data = []
-
-        for cellset, events in zip(self.cellsets, self.events):
-            if cells_used == "accepted":
-                status_file = os.path.splitext(events)[0] + "_status.csv"
-                status = pd.read_csv(status_file, index_col=0)               
-            cs = isx.CellSet.read(cellset)
-            es = isx.EventSet.read(events)
-            cs_names = [cs.get_cell_name(i) for i in range(cs.num_cells)]
-            for c in range(es.num_cells):
-                cellname = es.get_cell_name(c)
-                if (
-                    cells_used == "isx_accepted"
-                    and cs.get_cell_status(cs_names.index(cellname)) != "accepted"
-                ):
-                    continue
-                elif (
-                    cells_used == "accepted" and not status.loc[cellname, "corr_accepted"] or not status.loc[cellname, 'skew_accepted']
-                ):
-                    continue
-                data.append(
-                    {
-                        "Events (s)": es.get_cell_data(c)[0] / 1e6,
-                        "File": events,
-                        "Duration (s)": cs.timing.num_samples
-                        * cs.timing.period.to_usecs()
-                        / 1e6,
-                        "cell_name": cellname,
-                    }
-                )
+        return get_events(self.cellsets, self.events, cells_used=cells_used)
 
     def create_outputname(self, ending: str, from_cellset: bool = False) -> str:
 
