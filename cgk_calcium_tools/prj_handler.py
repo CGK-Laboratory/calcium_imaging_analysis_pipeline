@@ -2,26 +2,15 @@ import os
 from pathlib import Path
 from glob import glob
 import warnings
-import numpy as np
-import isx
 import json
 from typing import Union, Tuple
 
-import shutil
 import pandas as pd
-from .files_io import (
-    write_log_file,
-    remove_file_and_json,
-    same_json_or_remove,
-    json_filename,
-    parameters_for_isx,
-)
 from .jupyter_outputs import progress_bar
 from time import perf_counter
 from datetime import timedelta
 
 from .analysis_utils import apply_quality_criteria, compute_metrics,get_events
-from typing import Union
 from .isxp_reader import get_parent_and_file
 
 
@@ -55,7 +44,7 @@ class isx_prj_handler:
                 continue
             self.cellsets.append(cellsetfile)
             self.events.append(eventsfile)
-            
+
         if len(self.cellsets) == 0:
             raise Exception("No isx files found")
     def get_status(self):
