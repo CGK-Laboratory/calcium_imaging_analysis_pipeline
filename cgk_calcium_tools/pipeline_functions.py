@@ -1,6 +1,7 @@
 import isx
 from typing import Union,  Tuple
 from .processing import fix_frames
+from .isx_aux_functions import create_empty_events, cellset_is_empty, create_empty_cellset
 from typing import Callable
 from .files_io import (
     write_log_file,
@@ -9,8 +10,10 @@ from .files_io import (
 )
 import os
 import numpy as np
+import shutil
 f_register: dict[str, Callable] = {}
 f_message: dict[str, str] = {}
+
 def register(name: Union[str, list], message=None) -> None:
     
     if message is None:
@@ -366,8 +369,174 @@ def trim_movie(
         output_file_key="output_movie_file",
     )
 
+@register(['isx:event_detection','event_detection'],"Detecting Events")
+def isx_event_detection(input, output, ed_parameters: dict, verbose:bool=False) -> None:
+    new_data = {
+            "input_cell_set_files": os.path.basename(input),
+            "output_event_set_files": os.path.basename(output),
+    }
+    ed_parameters.update(new_data)
+    if same_json_or_remove(
+        ed_parameters,
+        output=output,
+        verbose=verbose,
+        input_files_keys=["input_cell_set_files"],
+    ):
+        return
+    try:
+        isx.event_detection(
+            **parameters_for_isx(
+                ed_parameters,
+                ["comments"],
+                {
+                    "input_cell_set_files": input,
+                    "output_event_set_files": output,
+                },
+            )
+        )
+    except Exception as e:
+        print(
+            f"Warning: Event_detection, failed to create file: {output}.\n"
+            + "Empty file created with its place"
+        )
+        create_empty_events(input, output)
+    write_log_file(
+        ed_parameters,
+        os.path.dirname(output),
+        {"function": "event_detection"},
+        input_files_keys=["input_cell_set_files"],
+        output_file_key="output_event_set_files",
+    )
 
 
+@register(['isx:auto_accept_reject','auto_accept_reject'],"Accepting/Rejecting Cells")
+def isx_auto_accept_reject(input_cell_set, input_event_set, ar_cell_set_file, ar_parameters: dict, verbose:bool=False) -> None:
+    new_data = {
+        "input_cell_set_files": os.path.basename(input_cell_set),
+        "input_event_set_files": os.path.basename(input_event_set),
+    }
+    ar_parameters.update(new_data)
+    try:
+        isx.auto_accept_reject(
+            **parameters_for_isx(
+                ar_parameters,
+                ["comments"],
+                {
+                    "input_cell_set_files": input_cell_set,
+                    "input_event_set_files": input_event_set,
+                },
+            )
+        )
+    except Exception as e:
+        if verbose:
+            print(e)
+    write_log_file(
+        ar_parameters,
+        os.path.dirname(input_cell_set),
+        {"function": "accept_reject", "config_json": ar_cell_set_file},
+        input_files_keys=["input_cell_set_files", "input_event_set_files"],
+        output_file_key="config_json",
+    )
+
+@register(['isx:deconvolve_cellset','deconvolve_cellset'],"Running Deconvolution Registration")
+def isx_deconvolve_cellset(cellset,denoise_file,ed_file, parameters: dict, verbose:bool=False) -> None:
+
+    new_data = {
+        "input_raw_cellset_files": os.path.basename(cellset),
+        "output_denoised_cellset_files": os.path.basename(denoise_file),
+        "output_spike_eventset_files": os.path.basename(ed_file),
+    }
+    parameters.update(new_data)
+
+    if not same_json_or_remove(
+        parameters,
+        output=denoise_file,
+        verbose=verbose,
+        input_files_keys=["input_raw_cellset_files"],
+    ):
+        if cellset_is_empty(cellset, accepted_only=parameters["accepted_only"]):
+            create_empty_events(cellset, ed_file)
+            create_empty_cellset(cellset, denoise_file)
+        else:
+            isx.deconvolve_cellset(
+                **parameters_for_isx(
+                    parameters,
+                    ["comments"],
+                    {
+                        "input_raw_cellset_files": cellset,
+                        "output_denoised_cellset_files": denoise_file,
+                        "output_spike_eventset_files": ed_file,
+                    },
+                )
+            )
+
+        for ofile, outkey in (
+            (denoise_file, "output_denoised_cellset_files"),
+            (ed_file, "output_spike_eventset_files"),
+        ):
+            write_log_file(
+                parameters,
+                os.path.dirname(ofile),
+                {"function": "deconvolve_cellset"},
+                input_files_keys=["input_raw_cellset_files"],
+                output_file_key=outkey,
+            )
+
+@register(['isx:multiplane_registration','multiplane_registration'],"Multiplane Registration...")
+def isx_multiplane_registration(input_cell_set_files, ar_cell_set_file, output_cell_set_file, mpr_parameters: dict, verbose:bool=False) -> None:
+    input_cell_set_file_names = [
+        os.path.basename(file) for file in input_cell_set_files
+    ]
+    new_data = {
+        "input_cell_set_files": input_cell_set_file_names,
+        "output_cell_set_file": os.path.basename(output_cell_set_file),
+        "auto_accept_reject": os.path.basename(ar_cell_set_file),
+                }
+    mpr_parameters.update(new_data)
+
+    if same_json_or_remove(
+        mpr_parameters,
+        output=output_cell_set_file,
+        verbose=verbose,
+        input_files_keys=["input_cell_set_files", "auto_accept_reject"],
+    ):
+        return
+    input_cellsets = []
+    for i in input_cell_set_files:
+        if not cellset_is_empty(i):
+            input_cellsets.append(i)
+
+    if len(input_cellsets) == 0:
+        print(
+            f"Warning: File: {output_cell_set_file} not generated.\n"
+            + "Empty cellmap created in its place"
+        )
+        create_empty_cellset(
+            input_file=input_cell_set_files[0],
+            output_cell_set_file=output_cell_set_file,
+        )
+
+    elif len(input_cellsets) == 1:
+        shutil.copyfile(input_cellsets[0], output_cell_set_file)
+    else:
+        isx.multiplane_registration(
+            **parameters_for_isx(
+                mpr_parameters,
+                ["comments", "auto_accept_reject"],
+                {
+                    "input_cell_set_files": input_cellsets,
+                    "output_cell_set_file": output_cell_set_file,
+                },
+            )
+        )
+
+    write_log_file(
+        mpr_parameters,
+        os.path.dirname(output_cell_set_file),
+        {"function": "multiplane_registration"},
+        input_files_keys=["input_cell_set_files", "auto_accept_reject"],
+        output_file_key="output_cell_set_file",
+    )
 def de_interleave(main_file, planes_fs, focus, overwrite: bool = False) -> None:
     """
     This function applies the isx.de_interleave function, which de-interleaves multiplane movies
@@ -434,3 +603,5 @@ def de_interleave(main_file, planes_fs, focus, overwrite: bool = False) -> None:
         )
 
     return
+
+

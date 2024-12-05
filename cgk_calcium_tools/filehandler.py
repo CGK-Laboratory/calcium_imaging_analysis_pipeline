@@ -1,8 +1,6 @@
 import copy
 import os
 from pathlib import Path
-import shutil
-
 from glob import glob
 import numpy as np
 import isx
@@ -22,12 +20,11 @@ from datetime import timedelta
 from .isx_aux_functions import (
     cellset_is_empty,
     create_empty_cellset,
-    create_empty_events,
     get_efocus,
     ifstr2list,
 )
 from .pipeline_functions import f_register, f_message, de_interleave
-from .analysis_utils import apply_quality_criteria, compute_metrics,get_events
+from .analysis_utils import apply_quality_criteria, compute_metrics, get_events
 
 
 def timer(method):
@@ -407,7 +404,7 @@ class isx_files_handler:
         min_skew=0.05,
         only_isx_accepted=True,
         overwrite=False,
-        verbose=False
+        verbose=False,
     ) -> pd.DataFrame:
         cell_set_files = self.get_results_filenames(
             f"{cellsetname}", op=None, single_plane=False
@@ -419,24 +416,27 @@ class isx_files_handler:
             f"{cellsetname}-ED_status.csv", op=None, single_plane=False
         )
         return apply_quality_criteria(
-            cell_set_files, metrics_files, status_files, 
+            cell_set_files,
+            metrics_files,
+            status_files,
             max_corr=max_corr,
             min_skew=min_skew,
             only_isx_accepted=only_isx_accepted,
             overwrite=overwrite,
-            verbose=verbose
+            verbose=verbose,
         )
-
 
     def get_status(self, cellsetname: str):
         data = []
-        status_files = self.get_results_filenames(f"{cellsetname}-ED_status.csv", op=None, single_plane=False)
-        for events,statusf in zip(self.events,status_files):
+        status_files = self.get_results_filenames(
+            f"{cellsetname}-ED_status.csv", op=None, single_plane=False
+        )
+        for events, statusf in zip(self.events, status_files):
             df = pd.read_csv(statusf, index_col=0)
-            df['File'] = events
+            df["File"] = events
             data.append(df)
         return pd.concat(data)
-        
+
     def get_events(self, cellsetname: str, cells_used="accepted"):
 
         event_det_files = self.get_results_filenames(
@@ -445,9 +445,8 @@ class isx_files_handler:
         cellset_files = self.get_results_filenames(
             f"{cellsetname}", op=None, single_plane=False
         )
+        # TODO: it could be merge with recording_labels
         return get_events(cellset_files, event_det_files, cells_used="accepted")
-
-
 
     def compute_metrics(self, cellsetname: str, verbose=False) -> pd.DataFrame:
         """
@@ -687,10 +686,7 @@ class isx_files_handler:
             Parameters for event detection, by default None
         accept_reject_params : Union[dict,None], optional
             Parameters for automatic accept_reject cell, by default None
-        multiplane_params : Union[dict,None], optional
-            Parameters for multiplane registration, by default None
-
-         Returns
+        Returns
         -------
         None
 
@@ -753,14 +749,10 @@ class isx_files_handler:
                     f"Warning: Algorithm {alg}, failed to create file: {output}.\n"
                     + "Empty cellmap created with its place"
                 )
-                movie = isx.Movie.read(input)
-                cell_set = isx.CellSet.write(output, movie.timing, movie.spacing)
-                image_null = np.zeros(cell_set.spacing.num_pixels).astype(np.float32)
-                trace_null = np.zeros(cell_set.timing.num_samples).astype(np.float32)
-                cell_set.set_cell_data(0, image_null, trace_null, "")
-                cell_set.flush()
-                del cell_set
-                del movie
+                create_empty_cellset(
+                    input_file=input,
+                    output_cell_set_file=output,
+                )
 
             write_log_file(
                 parameters,
@@ -780,50 +772,13 @@ class isx_files_handler:
                 ed_parameters[key] = value
 
         pb = progress_bar(len(cellsets), "Detecting Events")
+
         for input, output in zip(
             cellsets, self.get_results_filenames(f"{cellsetname}-ED", op=None)
         ):
-            new_data = {
-                "input_cell_set_files": os.path.basename(input),
-                "output_event_set_files": os.path.basename(output),
-            }
-            ed_parameters.update(new_data)
-            if same_json_or_remove(
-                ed_parameters,
-                output=output,
-                verbose=verbose,
-                input_files_keys=["input_cell_set_files"],
-            ):
-                continue
-            try:
-                isx.event_detection(
-                    **parameters_for_isx(
-                        ed_parameters,
-                        ["comments"],
-                        {
-                            "input_cell_set_files": input,
-                            "output_event_set_files": output,
-                        },
-                    )
-                )
-            except Exception as e:
-                print(
-                    f"Warning: Event_detection, failed to create file: {output}.\n"
-                    + "Empty file created with its place"
-                )
-                cell_set = isx.CellSet.read(input)
-                evset = isx.EventSet.write(output, cell_set.timing, [""])
-                evset.flush()
-                del evset
-                del cell_set
-            write_log_file(
-                ed_parameters,
-                os.path.dirname(output),
-                {"function": "event_detection"},
-                input_files_keys=["input_cell_set_files"],
-                output_file_key="output_event_set_files",
-            )
+            f_register["isx:event_detection"](input, output, ed_parameters)
             pb.update_progress_bar(1)
+
         if verbose:
             print("Event detection, done")
 
@@ -840,34 +795,8 @@ class isx_files_handler:
             self.get_results_filenames(f"{cellsetname}-ED", op=None),
             self.get_results_filenames(f"{cellsetname}-accept_reject", op=None),
         ):
-            new_data = {
-                "input_cell_set_files": os.path.basename(input_cs),
-                "input_event_set_files": os.path.basename(input_ev),
-            }
-            ar_parameters.update(new_data)
-            try:
-                isx.auto_accept_reject(
-                    **parameters_for_isx(
-                        ar_parameters,
-                        ["comments"],
-                        {
-                            "input_cell_set_files": input_cs,
-                            "input_event_set_files": input_ev,
-                        },
-                    )
-                )
-            except Exception as e:
-                if verbose:
-                    print(e)
-            write_log_file(
-                ar_parameters,
-                os.path.dirname(config_json),
-                {
-                    "function": "accept_reject",
-                    "config_json": os.path.basename(config_json),
-                },
-                input_files_keys=["input_cell_set_files", "input_event_set_files"],
-                output_file_key="config_json",
+            f_register["isx:auto_accept_reject"](
+                input_cs, input_ev, config_json, ar_parameters
             )
             pb.update_progress_bar(1)
         if verbose:
@@ -949,16 +878,6 @@ class isx_files_handler:
                 f"{cellsetname}-accept_reject", op=None, idx=idx, single_plane=False
             )[0]
 
-            input_cell_set_file_names = [
-                os.path.basename(file) for file in input_cell_set_files
-            ]
-            new_data = {
-                "input_cell_set_files": input_cell_set_file_names,
-                "output_cell_set_file": os.path.basename(output_cell_set_file),
-                "auto_accept_reject": os.path.basename(ar_cell_set_file),
-            }
-            mpr_parameters.update(new_data)
-
             if overwrite:
                 if os.path.exists(output_cell_set_file):
                     os.remove(output_cell_set_file)
@@ -966,112 +885,18 @@ class isx_files_handler:
                     if os.path.exists(json_file):
                         os.remove(json_file)
 
-            if not same_json_or_remove(
+            f_register["isx:multiplane_registration"](
+                input_cell_set_files,
+                ar_cell_set_file,
+                output_cell_set_file,
                 mpr_parameters,
-                output=output_cell_set_file,
-                verbose=verbose,
-                input_files_keys=["input_cell_set_files", "auto_accept_reject"],
-            ):
-                input_cellsets = []
-                for i in input_cell_set_files:
-                    if not cellset_is_empty(i):
-                        input_cellsets.append(i)
-
-                if len(input_cellsets) == 0:
-                    print(
-                        f"Warning: File: {output_cell_set_file} not generated.\n"
-                        + "Empty cellmap created in its place"
-                    )
-                    create_empty_cellset(
-                        input_file=input_cell_set_files[0],
-                        output_cell_set_file=output_cell_set_file,
-                    )
-
-                elif len(input_cellsets) == 1:
-                    shutil.copyfile(input_cellsets[0], output_cell_set_file)
-                else:
-                    isx.multiplane_registration(
-                        **parameters_for_isx(
-                            mpr_parameters,
-                            ["comments", "auto_accept_reject"],
-                            {
-                                "input_cell_set_files": input_cellsets,
-                                "output_cell_set_file": output_cell_set_file,
-                            },
-                        )
-                    )
-
-                write_log_file(
-                    mpr_parameters,
-                    os.path.dirname(output_cell_set_file),
-                    {"function": "multiplane_registration"},
-                    input_files_keys=["input_cell_set_files", "auto_accept_reject"],
-                    output_file_key="output_cell_set_file",
-                )
-
-            # event detection in registered cellset
-            new_data = {
-                "input_cell_set_files": os.path.basename(output_cell_set_file),
-                "output_event_set_files": os.path.basename(ed_file),
-            }
-            ed_parameters.update(new_data)
-            if not same_json_or_remove(
-                ed_parameters,
-                output=ed_file,
-                verbose=verbose,
-                input_files_keys=["input_cell_set_files"],
-            ):
-                try:
-                    isx.event_detection(
-                        **parameters_for_isx(
-                            ed_parameters,
-                            ["comments"],
-                            {
-                                "input_cell_set_files": output_cell_set_file,
-                                "output_event_set_files": ed_file,
-                            },
-                        )
-                    )
-                except Exception as e:
-                    print(
-                        f"Warning: Event_detection, failed to create file: {ed_file}.\n"
-                        + "Empty file created with its place"
-                    )
-                    create_empty_events(output_cell_set_file, ed_file)
-
-                write_log_file(
-                    ed_parameters,
-                    os.path.dirname(output_cell_set_file),
-                    {"function": "event_detection"},
-                    input_files_keys=["input_cell_set_files"],
-                    output_file_key="output_event_set_files",
-                )
-            # auto accept reject
-            new_data = {
-                "input_cell_set_files": os.path.basename(output_cell_set_file),
-                "input_event_set_files": os.path.basename(ed_file),
-            }
-            ar_parameters.update(new_data)
-            try:
-                isx.auto_accept_reject(
-                    **parameters_for_isx(
-                        ar_parameters,
-                        ["comments"],
-                        {
-                            "input_cell_set_files": output_cell_set_file,
-                            "input_event_set_files": ed_file,
-                        },
-                    )
-                )
-            except Exception as e:
-                if verbose:
-                    print(e)
-            write_log_file(
-                ar_parameters,
-                os.path.dirname(output_cell_set_file),
-                {"function": "accept_reject", "config_json": ar_cell_set_file},
-                input_files_keys=["input_cell_set_files", "input_event_set_files"],
-                output_file_key="config_json",
+                verbose,
+            )
+            f_register["isx:event_detection"](
+                output_cell_set_file, ed_file, ed_parameters, verbose
+            )
+            f_register["isx:auto_accept_reject"](
+                output_cell_set_file, ed_file, ar_cell_set_file, ar_parameters, verbose
             )
             self.output_file_paths.append(output_cell_set_file)
             pb.update_progress_bar(increment=1)
@@ -1080,7 +905,6 @@ class isx_files_handler:
     def run_deconvolution(
         self,
         overwrite: bool = False,
-        verbose: bool = False,
         params: Union[dict, None] = None,
         cellsetname: Union[str, None] = None,
     ) -> None:
@@ -1094,8 +918,6 @@ class isx_files_handler:
             Cellset name used, usually: 'cnmfe' or 'pca-ica'
         overwrite : bool, optional
             Force compute everything again, by default False
-        verbose : bool, optional
-            Show additional messages, by default False
         params : Union[dict,None], optional
             Parameters for deconvolution, by default None
 
@@ -1111,7 +933,6 @@ class isx_files_handler:
                 assert key in parameters, f"The parameter: {key} does not exist"
                 parameters[key] = value
 
-        self.output_file_paths = []
         cell_sets = self.get_results_filenames(
             f"{cellsetname}", op=None, single_plane=False
         )
@@ -1122,53 +943,13 @@ class isx_files_handler:
             f"{cellsetname}-SPI", op=None, single_plane=False
         )
         pb = progress_bar(len(cell_sets), "Running Deconvolution Registration to")
-
         for cellset, denoise_file, ed_file in zip(cell_sets, denoise_files, ed_files):
-
             if overwrite:
                 remove_file_and_json(denoise_file)
                 remove_file_and_json(ed_file)
-            new_data = {
-                "input_raw_cellset_files": os.path.basename(cellset),
-                "output_denoised_cellset_files": os.path.basename(denoise_file),
-                "output_spike_eventset_files": os.path.basename(ed_file),
-            }
-            parameters.update(new_data)
-
-            if not same_json_or_remove(
-                parameters,
-                output=denoise_file,
-                verbose=verbose,
-                input_files_keys=["input_raw_cellset_files"],
-            ):
-                if cellset_is_empty(cellset, accepted_only=parameters["accepted_only"]):
-                    create_empty_events(cellset, ed_file)
-                    create_empty_cellset(cellset, denoise_file)
-                else:
-                    isx.deconvolve_cellset(
-                        **parameters_for_isx(
-                            parameters,
-                            ["comments"],
-                            {
-                                "input_raw_cellset_files": cellset,
-                                "output_denoised_cellset_files": denoise_file,
-                                "output_spike_eventset_files": ed_file,
-                            },
-                        )
-                    )
-
-                for ofile, outkey in (
-                    (denoise_file, "output_denoised_cellset_files"),
-                    (ed_file, "output_spike_eventset_files"),
-                ):
-                    write_log_file(
-                        parameters,
-                        os.path.dirname(ofile),
-                        {"function": "deconvolve_cellset"},
-                        input_files_keys=["input_raw_cellset_files"],
-                        output_file_key=outkey,
-                    )
-
+            f_register["iisx:deconvolve_cellset"](
+                cellset, denoise_file, ed_file, parameters
+            )
             pb.update_progress_bar(increment=1)
         print("done")
 
@@ -1249,5 +1030,3 @@ class isx_files_handler:
 
     def get_total_time(cls):
         print(f"Current total execution time {timedelta(seconds=cls.total_time)}")
-
-
