@@ -354,7 +354,7 @@ def get_events(cellset_files, event_det_files, cells_used="accepted"):
                 cells_used == "accepted" and not status.loc[cellname, "accepted"]
             ):
                 continue
-            data.append(
+            data.append(pd.DataFrame(
                 {
                     "Events (s)": es.get_cell_data(c)[0] / 1e6,
                     "File": events,
@@ -363,5 +363,5 @@ def get_events(cellset_files, event_det_files, cells_used="accepted"):
                     / 1e6,
                     "cell_name": cellname,
                 }
-            )
+            ))
     return pd.concat(data)
