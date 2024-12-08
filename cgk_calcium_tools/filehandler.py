@@ -305,7 +305,10 @@ class isx_files_handler:
                 ),
                 recursive=True,
             )
-
+            if skip_pattern is not None:
+                files = [
+                    file for file in files if skip_pattern not in Path(file).name
+                ] 
             for f in files:
                 if f in loaded_meta_files:
                     continue
