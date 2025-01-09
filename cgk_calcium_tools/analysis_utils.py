@@ -100,6 +100,59 @@ def apply_quality_criteria(cell_set_files: list, metric_files: list, status_file
         metrics['corr_accepted'] = True
         metrics['corr_rejected_by'] = ''
 
+def compute_traces_corr(cell_set_files: list, corr_files: list, verbose=False) -> pd.DataFrame:
+    """
+    This function compute the correlation matrix for the cell traces.
+
+    Parameters
+    ----------
+    fh : isx_files_handler
+        isx_files_handler object
+    cellsetname : str
+        cell label to get filename
+    verbose : bool, optional
+        Show additional messages, by default False
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with the correlation matrix
+    """
+
+    for cellset, corr_file in zip(cell_set_files, corr_files):
+        inputs_args = {
+            "input_cell_set_file": os.path.basename(cellset),
+            "output_corr_file": os.path.basename(corr_file),
+        }
+        if not same_json_or_remove(
+            inputs_args,
+            output=corr_file,
+            verbose=verbose,
+            input_files_keys=["input_cell_set_file"],
+        ):
+            
+            cs = isx.CellSet.read(cellset)
+            num_cells = cs.num_cells
+            corr = np.zeros((num_cells, num_cells))
+            for i in range(num_cells-1):
+                tr1 = cs.get_cell_trace_data(i)
+                for j in range(i+1, num_cells):
+                    tr2 = cs.get_cell_trace_data(j)
+                    corr[i, j] = np.corrcoef(tr1, tr2)[0, 1]
+                    corr[j, i] = corr[i, j]
+            labels = [cs.get_cell_name(i) for i in range(cs.num_cells)]
+            df = pd.DataFrame(corr, index=labels, columns=labels)
+            df.to_csv(corr_file)
+            write_log_file(
+                inputs_args,
+                os.path.dirname(corr_file),
+                {"function": "cell_corr"},
+                input_files_keys=["input_cell_set_file"],
+                output_file_key="output_corr_file",
+            )
+    return
+
+
 
         good_cells = metrics[metrics['skew_accepted']].sort_values('snr', ascending=False).index
         for good_cell in good_cells:

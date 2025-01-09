@@ -13,7 +13,6 @@ import numpy as np
 import shutil
 f_register: dict[str, Callable] = {}
 f_message: dict[str, str] = {}
-
 def register(name: Union[str, list], message=None) -> None:
     
     if message is None:
@@ -537,6 +536,7 @@ def isx_multiplane_registration(input_cell_set_files, ar_cell_set_file, output_c
         input_files_keys=["input_cell_set_files", "auto_accept_reject"],
         output_file_key="output_cell_set_file",
     )
+
 def de_interleave(main_file, planes_fs, focus, overwrite: bool = False) -> None:
     """
     This function applies the isx.de_interleave function, which de-interleaves multiplane movies
@@ -603,5 +603,4 @@ def de_interleave(main_file, planes_fs, focus, overwrite: bool = False) -> None:
         )
 
     return
-
 

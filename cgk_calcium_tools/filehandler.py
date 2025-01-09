@@ -20,9 +20,7 @@ from datetime import timedelta
 from .isx_aux_functions import (
     cellset_is_empty,
     create_empty_cellset,
-    get_efocus,
-    ifstr2list,
-)
+
 from .pipeline_functions import f_register, f_message, de_interleave
 from .analysis_utils import apply_quality_criteria, compute_metrics, get_events
 
@@ -452,21 +450,6 @@ class isx_files_handler:
         return get_events(cellset_files, event_det_files, cells_used="accepted")
 
     def compute_metrics(self, cellsetname: str, verbose=False) -> pd.DataFrame:
-        """
-        This function compute the  correlation matrix for the cell traces.
-
-        Parameters
-        ----------
-        cellsetname : str
-            cell label to get filename
-        verbose : bool, optional
-            Show additional messages, by default False
-
-        Returns
-        -------
-        pd.DataFrame
-            DataFrame with the correlation matrix
-        """
 
         cell_set_files = self.get_results_filenames(
             f"{cellsetname}", op=None, single_plane=False
@@ -481,6 +464,7 @@ class isx_files_handler:
 
         # TODO: it could be merge with recording_labels
         return compute_metrics(cell_set_files, ed_files, metrics_files, verbose=verbose)
+
 
     def get_results_filenames(
         self,
@@ -659,6 +643,7 @@ class isx_files_handler:
         for input, output in pairlist:
             f_register[operation](input, output, parameters, verbose)
             pb.update_progress_bar(1)
+
 
     @timer
     def extract_cells(
