@@ -1,14 +1,9 @@
 import os
-from pathlib import Path
 from glob import glob
 import warnings
 import json
-from typing import Union, Tuple
 
 import pandas as pd
-from .jupyter_outputs import progress_bar
-from time import perf_counter
-from datetime import timedelta
 
 from .analysis_utils import apply_quality_criteria, compute_metrics,get_events
 from .isxp_reader import get_parent_and_file

@@ -18,7 +18,6 @@ from .jupyter_outputs import progress_bar
 from time import perf_counter
 from datetime import timedelta
 from .isx_aux_functions import (
-    cellset_is_empty,
     create_empty_cellset,
     get_efocus,
     ifstr2list,
@@ -100,7 +99,6 @@ class isx_files_handler:
 
         self.processing_steps = processing_steps
 
-        # Check if the parameters file exists at the given path, open and load it.
         assert os.path.exists(parameters_path), "parameters file does not exist"
         with open(parameters_path) as file:
             self.default_parameters = json.load(file)
