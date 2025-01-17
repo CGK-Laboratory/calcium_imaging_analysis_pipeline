@@ -2,7 +2,18 @@ import os
 import json
 import isx
 from datetime import datetime
+from typing import NamedTuple, Iterable, Union
 
+
+class RecordingFile(NamedTuple):
+    file: str = ""
+    efocus: Iterable[Union[int, float]]
+    resolution: Iterable = []
+    duration: Union[int, float]
+    frames_per_second: Union[int, float]
+    update_timestamp: list
+    source_files: list
+    creation_pipeline:dict= {}
 
 def parameters_for_isx(
     d: dict, keys_to_remove: list = [], to_update: dict = {}

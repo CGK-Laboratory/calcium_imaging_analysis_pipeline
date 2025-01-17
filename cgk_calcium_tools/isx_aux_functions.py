@@ -5,11 +5,28 @@ from typing import Iterable
 import warnings
 from pathlib import Path
 import shutil
-def ifstr2list(x) -> list:
-    if isinstance(x, list):
-        return x
-    return [x]
+from files_io import RecordingFile
 
+def read_isxd_file(main_folder, file, output_folder='.'):
+    video = isx.Movie.read(os.join(main_folder,file))
+    resolution = video.spacing.num_pixels
+    duration = video.timing.num_samples * video.timing.period.to_usecs() / 1e6
+    frames_per_second = 1 / (video.timing.period.to_usecs() / 1e6)
+
+    efocus = get_efocus(file, output_folder, video)
+    video.flush()
+    del video  # usefull for windows
+
+    return RecordingFile(
+        file=file,
+        efocus=efocus,
+        resolution=resolution,
+        duration=duration,
+        frames_per_second=frames_per_second,
+        update_timestamp=[None],
+        source_files=[None],
+        creation_function={}
+    )
 
 def get_efocus(file,outputfolder,video):
 # Lookig for multiplanes:
@@ -33,6 +50,7 @@ def get_efocus(file,outputfolder,video):
             outputfolder,
             Path(raw_gpio_file).name,
         )
+        os.makedirs(os.path.dirname(local_raw_gpio_file), exist_ok=True)
         shutil.copy2(raw_gpio_file, local_raw_gpio_file)
         efocus = get_efocus_from_gpio(local_raw_gpio_file)
     else:

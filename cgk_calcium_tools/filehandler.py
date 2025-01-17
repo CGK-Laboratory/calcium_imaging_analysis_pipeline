@@ -7,20 +7,22 @@ import isx
 import json
 from typing import Union, Tuple
 import pandas as pd
+import re
+
 from .files_io import (
     write_log_file,
     remove_file_and_json,
     same_json_or_remove,
     json_filename,
     parameters_for_isx,
+    RecordingFile,
 )
 from .jupyter_outputs import progress_bar
-from time import perf_counter
+from time import perf_counter, time
 from datetime import timedelta
 from .isx_aux_functions import (
     create_empty_cellset,
-    get_efocus,
-    ifstr2list,
+    read_isxd_file,
 )
 from .pipeline_functions import f_register, f_message, de_interleave
 from .analysis_utils import apply_quality_criteria, compute_metrics, get_events
@@ -39,289 +41,138 @@ def timer(method):
     return timed
 
 
+_global_parameters = {}
+
+
+def load_parameres(parameters_path=os.path.join(os.path.dirname(__file__), "default_parameter.json")):
+    assert os.path.exists(parameters_path), "parameters file does not exist"
+
+    with open(parameters_path) as file:
+        default_parameters = json.load(file)
+
+    return _global_parameters.update(default_parameters)
+
+load_parameres()
+
+def get_setting(key, default=None):
+    """Retrieve the value of a setting."""
+    return _global_parameters.get(key, default)
+
+def set_setting(key, value):
+    """Set the value of a setting."""
+    _global_parameters[key] = value
+
+
+
+
+
+
 class isx_files_handler:
     """
     This class helps handle and process Inscopix files/movies.
 
     Parameters
     ----------
-    main_data_folder : str or list, optional
-        Root folder containing the data. If a list each element should correspond
-        with elements in 'data_subfolders' and 'files_pattern'. Output data follows
+    main_data_folder : str, optional
+        Root folder containing the data. Output data follows
         the folder structure after this root folder. By default "."
-    data_subfolders : str or list, optional
-        Subfolders containing the files specified by 'files_patterns'. By default "."
-    files_patterns : list, optional
-        Naming patterns for the files. Also an easy way to select for one or
-        multiple files from the same folder. By default "**/*.isx" (selects all)
-    outputsfolders : str or list, optional
-        Folder where the outputs are saved, following the file structure after
-        'main_data_folder'. By default "."
-    processing_steps: list, optional
-        List of processing steps to run, listed in order
-        Naming steps will be use, adding one affter the previous ones. By default "["PP", "TR", "BP", "MC"]"
-    single_file_match: bool, optional
-        If True the pipeline will expect one .isx file per folder listed in the 'files_patterns'
-        variable. By default "False"
-    recording_labels: list, optional
-        Name the recorded file with a label to make it easier to recognize. By default "None"
-    files_list_log: str or None, optional
-        Path where the previous processing could have happened. If it has been
-        made previously, there is an early return. By default "None"
-    parameters_path: str, optional
-        Path with the information of the default parameter. If it does not exist, an error occurs.
-        By default "default_parameter.json" in the same folder as this file.
-    overwrite_metadata: bool, optional
-        If True overwrite metadata json file. By default False.
-    skip_pattern: str, optional
-        String pattern to ignore certain files. Case-sensitive. Default is None
+    output_folder : str, optional
+        Folder where the outputs are saved. By default "."        
     """
 
     total_time = 0
-
     @timer
     def __init__(
         self,
-        main_data_folder: Union[str, list] = ".",
-        outputsfolders: Union[str, list] = ".",
-        data_subfolders: Union[str, list] = ".",
-        files_patterns: Union[str, list] = "**/*.isxd",
-        processing_steps: list = ["PP", "TR", "BP", "MC", "DFF", "PM"],
-        single_file_match: bool = False,
-        recording_labels: Union[list, None] = None,
-        check_new_inputs: bool = True,
-        parameters_path: str = os.path.join(
-            os.path.dirname(__file__), "default_parameter.json"
-        ),
-        overwrite_metadata: bool = False,
-        skip_pattern: str = None,
+        main_data_folder,
+        recordings,
+        output_folder,
+        label,
     ):
 
-        self.processing_steps = processing_steps
+        self.output_folder = output_folder
+        self.main_data_folder = main_data_folder
+        self.creation_date = time.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        self.label = label
+        self.recordings = recordings
 
-        assert os.path.exists(parameters_path), "parameters file does not exist"
-        with open(parameters_path) as file:
-            self.default_parameters = json.load(file)
+    @classmethod
+    def load_isxd_files(cls, main_data_folder: str = ".",
+        output_folder: str = ".",
+        label: str = 'pipeline',
+        files_pattern: str = "*.isxd",
+        overwrite: bool = False):
+        """
+        This class helps handle and process Inscopix files/movies.
 
-        # Check if step TR is listed more than once
-        assert (
-            len([s for s in processing_steps if s.startswith("TR")]) <= 1
-        ), "Pipeline can't handle multiple trims"
+        Parameters
+        ----------
+        main_data_folder : str, optional
+            Root folder containing the data. Output data follows
+            the folder structure after this root folder. By default "."
+        output_folder : str, optional
+            Folder where the outputs are saved. By default "."        
+        files_pattern : str, optional
+            Naming patterns for the files. Also an easy way to select for one or
+            multiple files from the same folder. By default "**/*.isx" (selects all)
+        """
+        regex = re.compile(files_pattern)
 
-        # Initialize iterator for recording labels if provided
-        if recording_labels is not None:
-            recording_labels_iter = iter(recording_labels)
+        files = []
+        for file in Path(main_data_folder).rglob("*"):
+            sfile = str(file)
+            if file.is_file() and regex.match(sfile):                
+                files.append(sfile) 
+        
+        recordings = []
+        # Error if no files are found, lists if files were skipped
+        assert (len(files) > 0), "No file(s) found"
 
-        # Convert string inputs to lists
-        lists_inputs = {
-            "main_data_folder": ifstr2list(main_data_folder),
-            "outputsfolders": ifstr2list(outputsfolders),
-            "data_subfolders": ifstr2list(data_subfolders),
-            "files_patterns": ifstr2list(files_patterns),
-        }
+        # Prints confirmation of number of files found and skipped.
+        print(f"{len(files)} file(s) found.")
 
-        # Ensure all list inputs are the same length
-        len_list_variables = np.unique([len(v) for v in lists_inputs.values()])
-        len_list_variables = len_list_variables[len_list_variables > 1]
+        # Initializes progress bar
+        pb = progress_bar(len(files), "Loading")
 
-        if len(len_list_variables) > 0:
-            assert (
-                len((len_list_variables)) == 1
-            ), "the list inputs should have the same length"
-            len_list = len_list_variables[0]
-        else:
-            len_list = 1
-
-        for k, v in lists_inputs.items():
-            if len(v) != len_list:
-                # this will extend the single inputs
-                lists_inputs[k] = v * len_list
-
-        meta = {
-            "main_data_folder": lists_inputs["main_data_folder"],
-            "outputsfolders": [],
-            "recording_labels": [],
-            "rec_paths": [],
-            "p_rec_paths": [],
-            "p_outputsfolders": [],
-            "p_recording_labels": [],
-            "focus_files": {},
-            "efocus": [],
-            "resolution": [],
-            "duration": [],
-            "frames_per_second": [],
-        }
-
-        loaded_meta_files = (
-            []
-        )  # Used to avoid loading the same json file multiple times
-
-        for mainf, subfolder, fpatter, outf in zip(
-            lists_inputs["main_data_folder"],
-            lists_inputs["data_subfolders"],
-            lists_inputs["files_patterns"],
-            lists_inputs["outputsfolders"],
-        ):
-            if check_new_inputs:
-                # Grab all the files matching the input parameters
-                allFiles = glob(
-                    str(Path(mainf) / subfolder / fpatter), recursive=True
-                )  # grabs all the files with fpatter.
-                # Filter out files matching the skip pattern
-                if skip_pattern is not None:
-                    files = [
-                        file for file in allFiles if skip_pattern not in Path(file).name
-                    ]  # filter skip_pattern files out
-                else:
-                    files = allFiles
-
-                # Error if no files are found, lists if files were skipped
-                assert (
-                    len(files) > 0
-                ), f"No file(s) found for {str(Path(mainf) / subfolder / fpatter)}, {len(allFiles)-len(files)} files skipped"
-
-                # Prints confirmation of number of files found and skipped.
-                print(
-                    f"{len(files)} file(s) found, {len(allFiles)-len(files)} file(s) skipped"
-                )
-
-                metadata = {}
-
-                # If true, ensures only one file is found
-                if single_file_match:
-                    assert len(files) == 1, "Multiple files found for {}.".format(
-                        str(Path(mainf) / subfolder / fpatter)
-                    )
-                else:
-                    # removes files already in metadata
-                    files = [r for r in files if r not in meta["rec_paths"]]
-
-                # Initializes progress bar
-                pb = progress_bar(len(files), "Loading")
-
-                for file in files:
-                    # skip processing if metadata file already exists and overwrite is not allowed
-                    if not overwrite_metadata:
-                        json_file = os.path.join(
-                            str(Path(outf) / subfolder),
-                            os.path.splitext(os.path.basename(file))[0]
-                            + "_metadata.json",
-                        )
-                        if os.path.exists(json_file):
-                            pb.update_progress_bar(1)
-                            continue
-
-                    # Read the video file and grab metadata information
-                    video = isx.Movie.read(file)
-                    metadata[file] = copy.deepcopy(meta)
-                    metadata[file]["outputsfolders"] = [str(Path(outf) / subfolder)]
-                    metadata[file]["rec_paths"] = [file]
-                    metadata[file]["resolution"] = [video.spacing.num_pixels]
-                    metadata[file]["duration"] = [
-                        video.timing.num_samples * video.timing.period.to_usecs() / 1e6
-                    ]
-                    metadata[file]["frames_per_second"] = [
-                        1 / (video.timing.period.to_usecs() / 1e6)
-                    ]
-
-                    # Assign recording labels, if true -> same as rec_paths
-                    # Else use input recording labels
-                    if recording_labels is None:
-                        metadata[file]["recording_labels"] = metadata[file]["rec_paths"]
-                    else:
-                        assert (
-                            single_file_match
-                        ), "Multiple files found with {}. Recording labels not supported.".format(
-                            str(Path(mainf) / subfolder / fpatter)
-                        )
-                        metadata[file]["recording_labels"] = next(recording_labels_iter)
-
-                    for ofolder in metadata[file]["outputsfolders"]:
-                        os.makedirs(ofolder, exist_ok=True)
-
-                    efocus = get_efocus(
-                        file, metadata[file]["outputsfolders"][0], video
-                    )
-
-                    video.flush()
-                    del video  # usefull for windows
-
-                    # Update metadata with focus data
-                    if len(efocus) == 1:
-                        metadata[file]["focus_files"][file] = [file]
-                        metadata[file]["p_rec_paths"].append(file)
-                        metadata[file]["p_recording_labels"].append(
-                            metadata[file]["recording_labels"][0]
-                        )
-                        metadata[file]["efocus"].extend(efocus)
-                    else:
-                        metadata[file]["efocus"].extend(efocus)
-                        pr = Path(file)
-                        efocus_filenames = [
-                            pr.stem + "_" + str(ef) + pr.suffix for ef in efocus
-                        ]
-                        metadata[file]["focus_files"][file] = [
-                            str(Path(metadata[file]["outputsfolders"][0]) / Path(ef))
-                            for ef in efocus_filenames
-                        ]
-                        metadata[file]["p_recording_labels"].extend(
-                            [
-                                metadata[file]["recording_labels"][0] + f"_{ef}"
-                                for ef in efocus
-                            ]
-                        )
-                        metadata[file]["p_rec_paths"].extend(
-                            metadata[file]["focus_files"][file]
-                        )
-                    metadata[file]["p_outputsfolders"].extend(
-                        [metadata[file]["outputsfolders"][0]] * len(efocus)
-                    )
-
-                    # Update progress bar
-                    pb.update_progress_bar(1)
-
-                # Save metadata to JSON files
-                for raw_path, intern_data in metadata.items():
-                    json_file = os.path.join(
-                        intern_data["outputsfolders"][0],
-                        os.path.splitext(os.path.basename(raw_path))[0]
-                        + "_metadata.json",
-                    )
-                    # if exist, is remove to write it again with the new data
-                    if os.path.exists(json_file):
-                        os.remove(json_file)
-                    with open(json_file, "w") as j_file:
-                        json.dump(intern_data, j_file)
-            else:
-                assert not overwrite_metadata, "Overwriting json file not possible"
-
-            # Load metadata from existing JSON files
-            base_folder = os.path.join(outf, subfolder)
-            files = glob(
-                os.path.join(
-                    base_folder, os.path.splitext(fpatter)[0] + "_metadata.json"
-                ),
-                recursive=True,
+        for file in files:
+            # skip processing if metadata file already exists and overwrite is not allowed
+            json_file = os.path.join(
+                output_folder,
+                os.path.splitext(os.path.basename(file))[0]
+                + f"_{label}_metadata.json",
             )
-            if skip_pattern is not None:
-                files = [
-                    file for file in files if skip_pattern not in Path(file).name
-                ] 
-            for f in files:
-                if f in loaded_meta_files:
+            if os.path.exists(json_file):
+                if overwrite:
+                    os.remove(json_file)
+                else:
+                    with open(json_file, "r") as file_data:
+                        json_data = json.load(file_data)
+                    recordings.append(RecordingFile(**json_data))
+                    pb.update_progress_bar(1)
                     continue
-                with open(f, "r") as file_data:
-                    json_data = json.load(file_data)
-                    for key_j, value_j in json_data.items():
-                        if key_j == "focus_files":
-                            meta[key_j].update(value_j)
-                        elif key_j == "efocus":
-                            meta[key_j].append(value_j)
-                        else:
-                            meta[key_j].extend(value_j)
-                loaded_meta_files.append(f)
-        # Update object dictionary with metadata
-        self.__dict__.update(meta)
+
+            # Read the video file and grab metadata information
+            assert file.endswith(".isxd"), "Files must be inscopix's recordings"
+            rec = read_isxd_file(main_data_folder,file)
+            
+            recordings.append(rec)
+
+            os.makedirs(os.path.dirname(json_file), exist_ok=True)
+            with open(json_file, "w") as j_file:
+                json.dump(rec._asdict(), j_file)
+            # Update progress bar
+            pb.update_progress_bar(1)
+
+        return cls(main_data_folder, recordings, output_folder, label)
+
+    def save_pipeline(self,label,output_folder: str = "."):
+        pass
+
+    def load_pipeline(self,label,output_folder: str = "."):
+        pass
+
+
+
 
     def get_pair_filenames(self, operation: str) -> Tuple[list, list]:
         """
@@ -355,7 +206,7 @@ class isx_files_handler:
         else:
             suffix_in = "-" + "-".join(self.processing_steps[:opi]) + ".isxd"
 
-        for ofolder, file in zip(self.p_outputsfolders, self.p_rec_paths):
+        for ofolder, file in zip(self.p_outputsfolder, self.p_rec_paths):
             outputs.append(str(Path(ofolder, Path(file).stem + suffix_out)))
             if suffix_in is not None:
                 inputs.append(str(Path(ofolder, Path(file).stem + suffix_in)))
@@ -394,7 +245,7 @@ class isx_files_handler:
         outputs = []
         suffix_out = "-" + "-".join(self.processing_steps[: opi + 1]) + ".isxd"
 
-        for ofolder, file in zip(self.p_outputsfolders, self.p_rec_paths):
+        for ofolder, file in zip(self.p_outputsfolder, self.p_rec_paths):
             outputs.append(str(Path(ofolder, Path(file).stem + suffix_out)))
         return outputs
 
@@ -484,7 +335,6 @@ class isx_files_handler:
         self,
         name: str,
         op: Union[None, str] = None,
-        subfolder: str = "",
         idx: Union[None, int] = None,
         single_plane: bool = True,
     ) -> list:
@@ -497,8 +347,6 @@ class isx_files_handler:
             refers to the output path name.
         op : str or None, optional
             refers to the procesing steps to be executed. Default None.
-        subfolder : str, optional
-            string specifying the subfolder path. Default empty ("")
         idx : int or None, optional
             Default None.
         single_plane : bool, optional
@@ -529,19 +377,18 @@ class isx_files_handler:
 
         if single_plane:
             file_list = self.p_rec_paths
-            ofolders = self.p_outputsfolders
+            ofolders = self.p_outputsfolder
         else:
             file_list = self.rec_paths
-            ofolders = self.outputsfolders
+            ofolders = self.outputsfolder
         outputs = []
         for i, (file, ofolder) in enumerate(zip(file_list, ofolders)):
             if idx is None or i in idx:
-                os.makedirs(os.path.join(ofolder, subfolder), exist_ok=True)
+                os.makedirs(os.path.join(ofolder), exist_ok=True)
                 outputs.append(
                     str(
                         Path(
                             ofolder,
-                            subfolder,
                             Path(file).stem + suffix_out,
                         )
                     )
