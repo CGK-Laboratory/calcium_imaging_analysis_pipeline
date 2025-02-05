@@ -5,7 +5,82 @@ from typing import Iterable
 import warnings
 from pathlib import Path
 import shutil
-from files_io import RecordingFile
+from .files_io import RecordingFile
+from .recordings_handler import RecordingHandler
+import re
+from .jupyter_outputs import progress_bar
+import json
+
+
+def load_isxd_files( main_data_folder: str = ".",
+    output_folder: str = ".",
+    label: str = 'pipeline',
+    files_pattern: str = "*.isxd",
+    hierarchy: bool = False,
+    overwrite: bool = False):
+    """
+    This class helps handle and process Inscopix files/movies.
+
+    Parameters
+    ----------
+    main_data_folder : str, optional
+        Root folder containing the data. Output data follows
+        the folder structure after this root folder. By default "."
+    output_folder : str, optional
+        Folder where the outputs are saved. By default "."        
+    files_pattern : str, optional
+        Naming patterns for the files. Also an easy way to select for one or
+        multiple files from the same folder. By default "**/*.isx" (selects all)
+    """
+    regex = re.compile(files_pattern)
+
+    files = []
+    for file in Path(main_data_folder).rglob("*"):
+        sfile = str(file)
+        if file.is_file() and regex.match(sfile):                
+            files.append(sfile) 
+    
+    recordings = []
+    # Error if no files are found, lists if files were skipped
+    assert (len(files) > 0), "No file(s) found"
+
+    # Prints confirmation of number of files found and skipped.
+    print(f"{len(files)} file(s) found.")
+
+    # Initializes progress bar
+    pb = progress_bar(len(files), "Loading")
+
+    for file in files:
+        # skip processing if metadata file already exists and overwrite is not allowed
+        json_file = os.path.join(
+            output_folder,
+            os.path.splitext(os.path.basename(file))[0]
+            + f"_{label}_metadata.json",
+        )
+        if os.path.exists(json_file):
+            if overwrite:
+                os.remove(json_file)
+            else:
+                with open(json_file, "r") as file_data:
+                    json_data = json.load(file_data)
+                recordings.append(RecordingFile(**json_data))
+                pb.update_progress_bar(1)
+                continue
+
+        # Read the video file and grab metadata information
+        assert file.endswith(".isxd"), "Files must be inscopix's recordings"
+        rec = read_isxd_file(main_data_folder,file)
+        
+        recordings.append(rec)
+
+        os.makedirs(os.path.dirname(json_file), exist_ok=True)
+        with open(json_file, "w") as j_file:
+            json.dump(rec._asdict(), j_file)
+        # Update progress bar
+        pb.update_progress_bar(1)
+
+    return RecordingHandler(main_data_folder, recordings, output_folder, label,hierarchy=hierarchy)
+
 
 def read_isxd_file(main_folder, file, output_folder='.'):
     video = isx.Movie.read(os.join(main_folder,file))

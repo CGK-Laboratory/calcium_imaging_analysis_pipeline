@@ -1,21 +1,23 @@
 import os
 import json
-import isx
 from datetime import datetime
 from typing import NamedTuple, Iterable, Union
 
 
 class RecordingFile(NamedTuple):
     file: str = ""
+    main_folder: str = ""
     efocus: Iterable[Union[int, float]]
     resolution: Iterable = []
     duration: Union[int, float]
     frames_per_second: Union[int, float]
-    update_timestamp: list
-    source_files: list
-    creation_pipeline:dict= {}
+    additional_files: list = []
+    update_timestamp: str = ""
+    creation_function: str = ""
+    source_files: list = []
+    creation_function:dict= {}
 
-def parameters_for_isx(
+def edit_dictionary(
     d: dict, keys_to_remove: list = [], to_update: dict = {}
 ) -> dict:
     """
@@ -44,7 +46,7 @@ def parameters_for_isx(
 
 
 def same_json_or_remove(
-    parameters: dict, input_files_keys: list, output: str, verbose: bool
+    parameters: dict, output: str, verbose: bool
 ) -> bool:
     """
     If the file exist and the json is the same returns True.
@@ -52,10 +54,8 @@ def same_json_or_remove(
 
     Parameters
     ----------
-     parameters : dict
+    parameters : dict
         Parameter dictionary of executed functions.
-    input_files_keys : list
-        list wuth the parameters keys
     output : str
         output files path
     verbose : bool, optional
@@ -71,7 +71,7 @@ def same_json_or_remove(
     if os.path.exists(json_file):
         if os.path.exists(output):
             if check_same_existing_json(
-                parameters, json_file, input_files_keys, verbose
+                parameters, json_file, verbose
             ):
                 if verbose:
                     print(f"File {output} already created with these parameters")
@@ -83,7 +83,7 @@ def same_json_or_remove(
 
 
 def check_same_existing_json(
-    parameters: dict, json_file: str, input_files_keys: list, verbose: bool
+    parameters: dict, json_file: str, verbose: bool
 ) -> bool:
     """
     Go through the new parameters checking for diferences.
@@ -95,8 +95,6 @@ def check_same_existing_json(
         Parameter dictionary of executed functions.
     json_file : str
        json files path
-    input_files_keys : list
-        list with the parameters keys
     verbose : bool, optional
         Show additional messages, by default False
 
@@ -110,45 +108,37 @@ def check_same_existing_json(
         prev_parameters = json.load(file)
     for key, value in parameters.items():
         # only comments can be different
-        if key != "comments":
-            if key not in prev_parameters:
-                if verbose:
-                    print(f"new parameter {key}")
-                return False
-            elif prev_parameters[key] != value:
-                if key == "isx_version":
-                    if verbose:
-                        print(
-                            f"Warning. file created with isx version {prev_parameters[key]}, current:{value}"
-                        )
-                    continue
-                if verbose:
-                    print(f"different {key}: old:{prev_parameters[key]}, new:{value}")
-                return False
+        if key not in prev_parameters:
+            if verbose:
+                print(f"new parameter {key}")
+            return False
+        elif prev_parameters[key] != value:
+            if verbose:
+                print(f"different {key}: old:{prev_parameters[key]}, new:{value}")
+            return False
 
     # Check dates for all input files dates are consistent
-    for input_file_key in input_files_keys:
-        input_files = parameters[input_file_key]
+    input_files = parameters['input_files']
 
-        if isinstance(input_files, str):
-            # generalize for input fields containing lists
-            input_files = [input_files]
-        base_path = os.path.dirname(
-            json_file
-        )  # to get the absolut path from json file and add it to input_file, which is a relative path
-        for input_file in input_files:
-            json_file = json_filename(os.path.join(base_path, input_file))
-            if os.path.exists(json_file):
-                with open(json_file) as in_file:
-                    in_data = json.load(in_file)
-                if prev_parameters["input_modification_date"] < in_data["date"]:
-                    old_date = prev_parameters["input_modification_date"]
-                    new_date = in_data["date"]
-                    if verbose:
-                        print(
-                            f"updated file {json_file}: old:{old_date}, new:{new_date}"
-                        )
-                    return False
+    if isinstance(input_files, str):
+        # generalize for input fields containing lists
+        input_files = [input_files]
+    base_path = os.path.dirname(
+        json_file
+    )  # to get the absolut path from json file and add it to input_file, which is a relative path
+    for input_file in input_files:
+        json_file = json_filename(os.path.join(base_path, input_file))
+        if os.path.exists(json_file):
+            with open(json_file) as in_file:
+                in_data = json.load(in_file)
+            if prev_parameters["input_modification_date"] < in_data["date"]:
+                old_date = prev_parameters["input_modification_date"]
+                new_date = in_data["date"]
+                if verbose:
+                    print(
+                        f"updated file {json_file}: old:{old_date}, new:{new_date}"
+                    )
+                return False
     return True
 
 
@@ -193,11 +183,9 @@ def remove_file_and_json(output: str) -> None:
 
 def write_log_file(
     params: dict,
-    dir_name: str,
-    extra_params: dict = {},
-    input_files_keys: list = ["input_movie_files"],
-    output_file_key: str = "output_movie_files",
-) -> None:
+    file_outputs: list,
+    dir_name: str
+    ) -> None:
     """
     Removes the original file path and the asociated json file
 
@@ -205,12 +193,7 @@ def write_log_file(
     ----------
     params : dict
         Parameter dictionary of executed functions. Paths should be relative.
-    extra_params : dict, optional
-       Parameter dictionary, by default empty.
-    input_files_keys : list, optional
-        list with the parameters keys, by default ["input_movie_files"]
-    output_file_key :  str, optional
-        key to access output file, by default "output_movie_files".
+    file_outputs :  list
     dirname : str
         Combine the dirname with the basename to obtain the absolute path.
     Returns
@@ -220,29 +203,17 @@ def write_log_file(
     """
 
     data = params.copy()
-    data.update(extra_params)
-    data["isx_version"] = isx.__version__
-    if not isinstance(data[output_file_key], list):
-        data_output_file = [data[output_file_key]]
-    else:
-        data_output_file = data[output_file_key]
-    for output in data_output_file:
+    temp_date_str = ''
+    for output in file_outputs:
         log_path = json_filename(output)
-        actual_date = datetime.utcnow()
+        actual_date = datetime.now(datetime.timezone.utc)
         data["input_modification_date"] = None
-        if not isinstance(input_files_keys, list):
-            input_files_keys = [input_files_keys]
-        temp_date_str = ""
-        for input_file_key in input_files_keys:
-            input_files = data[input_file_key]
-            if not isinstance(input_files, list):
-                input_files = [input_files]
-            for input_file in input_files:
-                input_json = json_filename(input_file)
-                if os.path.exists(os.path.join(dir_name, input_json)):
-                    with open(os.path.join(dir_name, input_json)) as file:
-                        input_data = json.load(file)
-                    temp_date_str = max(input_data["date"], temp_date_str)
+        for input_file in data['input_files']:
+            input_json = json_filename(input_file)
+            if os.path.exists(os.path.join(dir_name, input_json)):
+                with open(os.path.join(dir_name, input_json)) as file:
+                    input_data = json.load(file)
+                temp_date_str = max(input_data["date"], temp_date_str)
         data["input_modification_date"] = temp_date_str
         data["date"] = actual_date.strftime("%Y-%m-%d %H:%M:%S")
         with open(os.path.join(dir_name, log_path), "w") as file:

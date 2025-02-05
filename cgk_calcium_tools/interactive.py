@@ -11,15 +11,15 @@ import panel as pn
 import pandas as pd
 
 
-def interactive_reject_accept_cell(files_handler, cellset_names: str) -> pn.Row:
+def interactive_reject_accept_cell(RecordingHandler, cellset_names: str) -> pn.Row:
     """
     This function runs a simple GUI inside a jupyter notebook to see the calcium traces
     and accept/reject cells
 
     Parameters
     ----------
-    files_handler : isx_files_handler
-        isx_files_handler to use.
+    RecordingHandler : isx_RecordingHandler
+        isx_RecordingHandler to use.
     cellset_names : str
         Name added to the results to describe the cellsets (usually related to the method use to detect cells).
 
@@ -29,11 +29,11 @@ def interactive_reject_accept_cell(files_handler, cellset_names: str) -> pn.Row:
         panel layout
     """
     pn.extension()
-    file_list = files_handler.get_results_filenames(cellset_names, single_plane=True)
+    file_list = RecordingHandler.get_results_filenames(cellset_names, single_plane=True)
 
     def callback_cellinfile(target, event):
         cs = isx.CellSet.read(
-            file_list[files_handler.p_recording_labels.index(event.new)],
+            file_list[RecordingHandler.p_recording_labels.index(event.new)],
             read_only=True,
         )
         target.options = [cs.get_cell_name(x) for x in range(cs.num_cells)]
@@ -42,7 +42,7 @@ def interactive_reject_accept_cell(files_handler, cellset_names: str) -> pn.Row:
         target.param.trigger("value")
 
     select_files = pn.widgets.Select(
-        name="Select Session", options=files_handler.recording_labels, width=130
+        name="Select Session", options=RecordingHandler.recording_labels, width=130
     )
     select_cell = pn.widgets.Select(
         name="Select Cell", options=[], size=6, width=130
@@ -54,7 +54,7 @@ def interactive_reject_accept_cell(files_handler, cellset_names: str) -> pn.Row:
     def change_cell_status(new_status):
         if status.value == new_status:
             return
-        nfile = files_handler.recording_labels.index(select_files.value)
+        nfile = RecordingHandler.recording_labels.index(select_files.value)
         cs = isx.CellSet.read(file_list[nfile], read_only=False)
         n = select_cell.options.index(select_cell.value)
         cs.set_cell_status(n, new_status)
@@ -66,7 +66,7 @@ def interactive_reject_accept_cell(files_handler, cellset_names: str) -> pn.Row:
 
     @pn.depends(select_cell)
     def timeplot(cellvall):
-        nfile = files_handler.recording_labels.index(select_files.value)
+        nfile = RecordingHandler.recording_labels.index(select_files.value)
         n = select_cell.options.index(select_cell.value)
 
         cs = isx.CellSet.read(
@@ -93,7 +93,7 @@ def interactive_reject_accept_cell(files_handler, cellset_names: str) -> pn.Row:
     select_files.link(
         select_cell, callbacks={"value": callback_cellinfile}, bidirectional=False
     )
-    select_files.value = files_handler.p_recording_labels[0]
+    select_files.value = RecordingHandler.p_recording_labels[0]
     select_files.param.trigger("value")
 
     return pn.Row(

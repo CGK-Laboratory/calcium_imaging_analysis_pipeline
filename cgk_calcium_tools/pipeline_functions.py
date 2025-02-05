@@ -7,31 +7,32 @@ from .files_io import (
     write_log_file,
     same_json_or_remove,
     parameters_for_isx,
+    RecordingFile, 
+    append_to_filaname
 )
 import os
 import numpy as np
 import shutil
-f_register: dict[str, Callable] = {}
-f_message: dict[str, str] = {}
 
-def register(name: Union[str, list], message=None) -> None:
+
+rec_functions = {
+    'function':{},
+    'message': {},
+    'suffix':{}}
+
+def register(name: str, message=None,suffix=None) -> None:
     
     if message is None:
-        message = f"Running function: {name}"
+        message = f"Running function: {name}..."
 
     def decorator(func: Callable) -> None:
         assert isinstance(func, Callable)
-        if  isinstance(name, list):            
-            for n in name:
-                f_register[n] = func
-                f_message[n] = message
-        else:
-            f_register[name] = func
-            f_message[name] = message
+        rec_functions[name]['function'] = func
+        rec_functions[name]['message'] = message
+        rec_functions[name]['suffix'] = suffix
     return decorator
-
-        
-@register(['isx:spatial_filter', "spatial_filter"],"Preprocessing")
+       
+@register('isx:spatial_filter',"Preprocessing",'BP')
 def isx_spatial_filter(input, output, parameters, verbose) -> None:
     """
     Applies spatial bandpass filtering to each frame of one or more movies
@@ -83,7 +84,7 @@ def isx_spatial_filter(input, output, parameters, verbose) -> None:
 
 
 
-@register(['isx:motion_correct', "motion_correct"],"Applying Motion Correction to")
+@register('isx:motion_correct',"Applying Motion Correction...",'MC')
 def isx_motion_correct(input, output, parameters, verbose) -> None:
     """
     After checks, use the isx.motion_correct function, which motion correct movies to a reference frame.
@@ -145,7 +146,7 @@ def isx_motion_correct(input, output, parameters, verbose) -> None:
         print("{} motion correction completed".format(output))
 
 
-@register(['isx:preprocessing', "preprocessing"],"Applying Bandpass Filter to")
+@register('isx:preprocessing',"Applying Bandpass Filter..", 'PP')
 def isx_preprocessing(input, output, parameters, verbose) -> None:
     """
     After performing checks, use the isx.preprocess function, which preprocesses movies,
@@ -216,7 +217,7 @@ def isx_preprocessing(input, output, parameters, verbose) -> None:
 
 
 
-@register(['isx:dff', "dff"],"Normalizing via DF/F0")
+@register('isx:dff',"Normalizing via DF/F0",'DFF')
 def isx_dff(input, output, parameters, verbose) -> None:
 
     """
@@ -263,7 +264,7 @@ def isx_dff(input, output, parameters, verbose) -> None:
     )
 
 
-@register(['isx:project_movie', "project_movie"],"Projecting Movies")
+@register('isx:project_movie',"Projecting Movies",'PM')
 def project_movie(input, output, parameters: dict, verbose:bool=False) -> None:
     """
     This function applies isx.project_movie to project movies to a single statistic image.
@@ -308,7 +309,7 @@ def project_movie(input, output, parameters: dict, verbose:bool=False) -> None:
     )
 
 
-@register(['isx:trim_movie','trim'],"Trimming")
+@register('isx:trim_movie',"Trimming",'TR')
 def trim_movie(
     input, output,
     user_parameters: dict,
@@ -369,175 +370,112 @@ def trim_movie(
         output_file_key="output_movie_file",
     )
 
-@register(['isx:event_detection','event_detection'],"Detecting Events")
-def isx_event_detection(input, output, ed_parameters: dict, verbose:bool=False) -> None:
-    new_data = {
-            "input_cell_set_files": os.path.basename(input),
-            "output_event_set_files": os.path.basename(output),
-    }
-    ed_parameters.update(new_data)
-    if same_json_or_remove(
-        ed_parameters,
-        output=output,
-        verbose=verbose,
-        input_files_keys=["input_cell_set_files"],
-    ):
-        return
-    try:
-        isx.event_detection(
-            **parameters_for_isx(
-                ed_parameters,
-                ["comments"],
-                {
-                    "input_cell_set_files": input,
-                    "output_event_set_files": output,
-                },
-            )
-        )
-    except Exception as e:
-        print(
-            f"Warning: Event_detection, failed to create file: {output}.\n"
-            + "Empty file created with its place"
-        )
-        create_empty_events(input, output)
-    write_log_file(
-        ed_parameters,
-        os.path.dirname(output),
-        {"function": "event_detection"},
-        input_files_keys=["input_cell_set_files"],
-        output_file_key="output_event_set_files",
-    )
 
+@register('isx:cnmfe',"Extracting Cells...",'cnmfe')
+@register('isx:pca_ica',"Extracting Cells...",'pca_ica')
+def extract_cells( #broken
+        self,
+        alg: str,
+        overwrite: bool = False,
+        verbose: bool = False,
+        cells_extr_params: Union[dict, None] = None,
+        cellsetname: Union[str, None] = None,
+    ) -> None:
+        """
+        This function run a cell extraction algorithm, detect events
+        and auto accept_reject
 
-@register(['isx:auto_accept_reject','auto_accept_reject'],"Accepting/Rejecting Cells")
-def isx_auto_accept_reject(input_cell_set, input_event_set, ar_cell_set_file, ar_parameters: dict, verbose:bool=False) -> None:
-    new_data = {
-        "input_cell_set_files": os.path.basename(input_cell_set),
-        "input_event_set_files": os.path.basename(input_event_set),
-    }
-    ar_parameters.update(new_data)
-    try:
-        isx.auto_accept_reject(
-            **parameters_for_isx(
-                ar_parameters,
-                ["comments"],
-                {
-                    "input_cell_set_files": input_cell_set,
-                    "input_event_set_files": input_event_set,
-                },
-            )
-        )
-    except Exception as e:
-        if verbose:
-            print(e)
-    write_log_file(
-        ar_parameters,
-        os.path.dirname(input_cell_set),
-        {"function": "accept_reject", "config_json": ar_cell_set_file},
-        input_files_keys=["input_cell_set_files", "input_event_set_files"],
-        output_file_key="config_json",
-    )
+        Parameters
+        ----------
+        alg : str
+            Cell extraction algorithm: 'cnmfe' or 'pca-ica'
+        overwrite : bool, optional
+            Force compute everything again, by default False
+        verbose : bool, optional
+            Show additional messages, by default False
+        cells_extr_params : Union[dict,None], optional
+            Parameters for cell extraction, by default None
+        detection_params : Union[dict,None], optional
+            Parameters for event detection, by default None
+        accept_reject_params : Union[dict,None], optional
+            Parameters for automatic accept_reject cell, by default None
+        Returns
+        -------
+        None
 
-@register(['isx:deconvolve_cellset','deconvolve_cellset'],"Running Deconvolution Registration")
-def isx_deconvolve_cellset(cellset,denoise_file,ed_file, parameters: dict, verbose:bool=False) -> None:
+        """
+        assert alg in ["pca-ica", "cnmfe"], "alg must be 'pca-ica' or 'cnmfe'."
 
-    new_data = {
-        "input_raw_cellset_files": os.path.basename(cellset),
-        "output_denoised_cellset_files": os.path.basename(denoise_file),
-        "output_spike_eventset_files": os.path.basename(ed_file),
-    }
-    parameters.update(new_data)
+        # extract cells
+        parameters = self.default_parameters[alg].copy()
+        if cells_extr_params is not None:
+            for key, value in cells_extr_params.items():
+                assert key in parameters, f"The parameter: {key} does not exist"
+                parameters[key] = value
 
-    if not same_json_or_remove(
-        parameters,
-        output=denoise_file,
-        verbose=verbose,
-        input_files_keys=["input_raw_cellset_files"],
-    ):
-        if cellset_is_empty(cellset, accepted_only=parameters["accepted_only"]):
-            create_empty_events(cellset, ed_file)
-            create_empty_cellset(cellset, denoise_file)
+        if alg == "pca-ica":
+            cell_det_fn = isx.pca_ica
+            # pca uses dff:
+            inputs_files = self.get_results_filenames("dff", op="MC")
+        elif alg == "cnmfe":
+            cell_det_fn = isx.run_cnmfe
+            inputs_files = self.get_filenames(op=None)
         else:
-            isx.deconvolve_cellset(
+            raise "alg must be 'pca-ica' or 'cnmfe'."
+        if cellsetname is None:
+            cellsetname = alg
+        cellsets = self.get_results_filenames(f"{cellsetname}", op=None)
+
+        if overwrite:
+            for fout in cellsets:
+                if os.path.exists(fout):
+                    os.remove(fout)
+                    json_file = os.path.join(os.path.dirname(fout), os.path.splitext(fout)[0], ".json")
+                    if os.path.exists(json_file):
+                        os.remove(json_file)
+
+        for input, output in zip(inputs_files, cellsets):
+            new_data = {
+                "input_movie_files": os.path.basename(input),
+                "output_cell_set_files": os.path.basename(output),
+            }
+            parameters.update(new_data)
+            if same_json_or_remove(
+                parameters,
+                input_files_keys=["input_movie_files"],
+                output=output,
+                verbose=verbose,
+            ):
+                continue
+            cell_det_fn(
                 **parameters_for_isx(
                     parameters,
-                    ["comments"],
-                    {
-                        "input_raw_cellset_files": cellset,
-                        "output_denoised_cellset_files": denoise_file,
-                        "output_spike_eventset_files": ed_file,
-                    },
+                    {"input_movie_files": input, "output_cell_set_files": output},
                 )
             )
 
-        for ofile, outkey in (
-            (denoise_file, "output_denoised_cellset_files"),
-            (ed_file, "output_spike_eventset_files"),
-        ):
+            if not os.path.exists(output):
+                print(
+                    f"Warning: Algorithm {alg}, failed to create file: {output}.\n"
+                    + "Empty cellmap created with its place"
+                )
+                create_empty_cellset(
+                    input_file=input,
+                    output_cell_set_file=output,
+                )
+
             write_log_file(
                 parameters,
-                os.path.dirname(ofile),
-                {"function": "deconvolve_cellset"},
-                input_files_keys=["input_raw_cellset_files"],
-                output_file_key=outkey,
+                os.path.dirname(output),
+                {"function": alg},
+                input_files_keys=["input_movie_files"],
+                output_file_key="output_cell_set_files",
             )
+        if verbose:
+            print("Cell extraction, done")
 
-@register(['isx:multiplane_registration','multiplane_registration'],"Multiplane Registration...")
-def isx_multiplane_registration(input_cell_set_files, ar_cell_set_file, output_cell_set_file, mpr_parameters: dict, verbose:bool=False) -> None:
-    input_cell_set_file_names = [
-        os.path.basename(file) for file in input_cell_set_files
-    ]
-    new_data = {
-        "input_cell_set_files": input_cell_set_file_names,
-        "output_cell_set_file": os.path.basename(output_cell_set_file),
-        "auto_accept_reject": os.path.basename(ar_cell_set_file),
-                }
-    mpr_parameters.update(new_data)
-
-    if same_json_or_remove(
-        mpr_parameters,
-        output=output_cell_set_file,
-        verbose=verbose,
-        input_files_keys=["input_cell_set_files", "auto_accept_reject"],
-    ):
-        return
-    input_cellsets = []
-    for i in input_cell_set_files:
-        if not cellset_is_empty(i):
-            input_cellsets.append(i)
-
-    if len(input_cellsets) == 0:
-        print(
-            f"Warning: File: {output_cell_set_file} not generated.\n"
-            + "Empty cellmap created in its place"
-        )
-        create_empty_cellset(
-            input_file=input_cell_set_files[0],
-            output_cell_set_file=output_cell_set_file,
-        )
-
-    elif len(input_cellsets) == 1:
-        shutil.copyfile(input_cellsets[0], output_cell_set_file)
-    else:
-        isx.multiplane_registration(
-            **parameters_for_isx(
-                mpr_parameters,
-                ["comments", "auto_accept_reject"],
-                {
-                    "input_cell_set_files": input_cellsets,
-                    "output_cell_set_file": output_cell_set_file,
-                },
-            )
-        )
-
-    write_log_file(
-        mpr_parameters,
-        os.path.dirname(output_cell_set_file),
-        {"function": "multiplane_registration"},
-        input_files_keys=["input_cell_set_files", "auto_accept_reject"],
-        output_file_key="output_cell_set_file",
-    )
-def de_interleave(main_file, planes_fs, focus, overwrite: bool = False) -> None:
+@register('isx:de_interleave',"De-interleaving multiplane movies...",'DI')
+def de_interleave(recording, output_folder, suffix, verbose: bool, **kws) -> None:
     """
     This function applies the isx.de_interleave function, which de-interleaves multiplane movies
 
@@ -552,56 +490,51 @@ def de_interleave(main_file, planes_fs, focus, overwrite: bool = False) -> None:
     None
 
     """
-
+    main_file_rel = os.path.splitext(recording.file)
+    main_file = os.path.join(recording.main_folder, main_file_rel)
     # Initialize progress bar
-    if len(focus) > 1:  # has multiplane
+    if len(recording.focus) > 1:  # has multiplane
         existing_files = []
-        for sp_file in planes_fs:
+        fname,ext = os.path.splitext(recording.file)
+        sp_files_rel = [fname + f"-{suffix}_{focus}." + ext for focus in recording.focus]
+        sp_files = [os.path.join(output_folder,f) for f in sp_files_rel]
+        for sp_file in sp_files_rel:
             dirname = os.path.dirname(sp_file)
-            json_file = os.path.splitext(sp_file)[0] + ".json"
+            
+            parameters={
+                        'function_params':{
+                        "source_rel": main_file_rel,
+                        "output_rel": sp_files_rel,
+                        "efocus": recording.focus},                        
+                        'isx_version':isx.__version__,
+                        'input_files':[main_file_rel]
+                    }
+
             if os.path.exists(sp_file):
-                if overwrite:
-                    os.remove(sp_file)
-                    if os.path.exists(json_file):
-                        os.remove(json_file)
-                else:
-                    if same_json_or_remove(
-                        parameters={
-                            "input_movie_files": main_file,
-                            "output_movie_files": [
-                                os.path.basename(p) for p in planes_fs
-                            ],
-                            "in_efocus_values": focus,
-                        },
-                        input_files_keys=["input_movie_files"],
-                        output=sp_file,
-                        verbose=False,
-                    ):
-                        existing_files.append(sp_file)
-        if len(existing_files) != len(planes_fs):  # has files to run
+                if same_json_or_remove(
+                    parameters = parameters,
+                    output=sp_file,
+                    verbose=False,
+                ):
+                    existing_files.append(sp_file)
+                    
+        if len(existing_files) != len(recording.file):  # some file is missing
             for f in existing_files:  # remove existing planes
                 os.remove(f)
+                os.remove(os.path.splitext(f)[0] + ".json")
             try:
-                isx.de_interleave(main_file, planes_fs, focus)
+                isx.de_interleave(main_file, sp_files_rel, recording.fileocus)
 
             except Exception as err:
                 print("Reading: ", main_file)
-                print("Writting: ", planes_fs)
+                print("Writting: ", sp_files)
                 raise err
 
-        data = {
-            "input_movie_files": main_file,
-            "output_movie_files": [os.path.basename(p) for p in planes_fs],
-            "in_efocus_values": focus,
-        }
         # for sp_file in planes_fs:
         write_log_file(
-            params=data,
+            params=parameters,
             dir_name=dirname,
-            input_files_keys=["input_movie_files"],
-            output_file_key="output_movie_files",
+            file_outputs=sp_files,
         )
 
-    return
-
-
+    return sp_files, None

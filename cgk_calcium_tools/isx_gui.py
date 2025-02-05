@@ -1,16 +1,16 @@
 import numpy as np
 from pathlib import Path
 import os
-from .filehandler import isx_files_handler
+from .recordings_handler import isx_RecordingHandler
 import isx
 
 
-def create_inscopix_projects(fh: isx_files_handler, cellsetname="pca-ica"):
+def create_inscopix_projects(fh: isx_RecordingHandler, cellsetname="pca-ica"):
     """
-    Creates an Inscopix project file (.isxp) from a given isx_files_handler object and cellset result.
+    Creates an Inscopix project file (.isxp) from a given isx_RecordingHandler object and cellset result.
 
     Parameters:
-    fh (isx_files_handler): The isx_files_handler object containing the necessary files and information.
+    fh (isx_RecordingHandler): The isx_RecordingHandler object containing the necessary files and information.
     cellsetname (str, optional): The name of the cellset to use. Defaults to "pca-ica".
 
     Returns:
