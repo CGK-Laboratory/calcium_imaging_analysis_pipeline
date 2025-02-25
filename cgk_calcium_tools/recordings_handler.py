@@ -1,27 +1,17 @@
 import os
-from pathlib import Path
 import json
-from typing import Union, Tuple, Self
-
+from typing_extensions import Self
 import pandas as pd
 
-from .files_io import (
-    write_log_file,
-    remove_file_and_json,
-    same_json_or_remove,
+from cgk_calcium_tools.files_io import (
     json_filename,
-    parameters_for_isx,
     RecordingFile,
 )
-from .handlers_functions import flatt_lists,hierarchy_from_paths
-from .jupyter_outputs import progress_bar
-from time import time
-from datetime import timedelta
-from .isx_aux_functions import (
-    create_empty_cellset,
-)
-from .pipeline_functions import rec_functions
-from . import _global_parameters
+from cgk_calcium_tools.handlers_functions import flatt_lists,hierarchy_from_paths,update_nested_lists
+from cgk_calcium_tools.jupyter_outputs import progress_bar
+from datetime import datetime, timezone
+from cgk_calcium_tools.pipeline_functions import rec_functions
+from .params_tools import _global_parameters
 
 class RecordingHandler:
     """
@@ -37,9 +27,10 @@ class RecordingHandler:
     """
 
     def __init__(self, main_data_folder, recordings, output_folder, label, infere_hierarchy=False):
+        assert isinstance(recordings, list), "Recordings must be a list"
         self.output_folder = output_folder
         self.main_data_folder = main_data_folder
-        self.creation_date = time.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        self.creation_date = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         self.label = label
         if infere_hierarchy:
             recordings = hierarchy_from_paths(recordings)
@@ -83,25 +74,14 @@ class RecordingHandler:
                         counter += 1
         print(f"{counter} files removed.")
 
+    def get_recording_info(self):
+        return pd.DataFrame(self.recordings_list)
+
     def get_source(self, function, parameters, label=None):
         pass
 
     def get_metadata(self, function, parameters, label=None):
         pass
-
-    def segment_deepest_hierarchy(self):
-        recordings = []
-        for first_level in self.hierarchy:
-            if not isinstance(first_level[0], list):
-
-            while isinstance(recs, list):
-                recs = recs[0]
-            current_index = parent_index + [i]
-            if isinstance(element, list):
-                recordings.append(recs)
-            else:
-                flat_list.append(HierarchicalIndex(value=element, index=current_index))
-        return recordings
 
     def apply(self, fun, parameters, label=None,verbose=False,
         **kws) -> Self:
@@ -113,14 +93,17 @@ class RecordingHandler:
             parameters[key] = value
 
         # Run the selected operation
-        pb = progress_bar(len(self.recordings), rec_functions[fun]['message'])
-        for input in self.recordings:
-            new_rec, additional_outputs = rec_functions[fun]['function'](input, output_folder=self.output_folder, parameters, verbose)
+        pb = progress_bar(len(self.recordings_list), rec_functions[fun]['message'])
+        changes = []
+        for rec_input in self.recordings_list:
+            new_rec, additional_outputs = rec_functions[fun]['function'](rec_input, output_folder=self.output_folder, 
+                                                                         parameters=parameters, verbose=verbose)
+            changes[rec_input]=new_rec
             pb.update_progress_bar(1)
 
 
-
-
+        new_hierarchy = update_nested_lists(self.recordings.copy(), changes)
+        return RecordingHandler(self.main_data_folder, new_hierarchy, self.output_folder, label, infere_hierarchy=False)
     def _recompute_from_log(self, json_file: str) -> None:
         if not os.path.exists(json_file):
             assert os.path.exists(os.path.splitext(json_file)), (

@@ -5,21 +5,20 @@ from typing import NamedTuple, Iterable, Union
 
 
 class RecordingFile(NamedTuple):
-    file: str = ""
+    file: str = "" #file path relative to main_folder
     main_folder: str = ""
-    efocus: Iterable[Union[int, float]]
+    efocus: Iterable[Union[int, float]] = []
     resolution: Iterable = []
-    duration: Union[int, float]
-    frames_per_second: Union[int, float]
+    duration: float = 0
+    frames_per_second: float = 0
     additional_files: list = []
     update_timestamp: str = ""
     creation_function: str = ""
     source_files: list = []
-    creation_function:dict= {}
+    creation_function: dict = {}
 
-def edit_dictionary(
-    d: dict, keys_to_remove: list = [], to_update: dict = {}
-) -> dict:
+
+def edit_dictionary(d: dict, keys_to_remove: list = [], to_update: dict = {}) -> dict:
     """
     Creates a copy of a dictionary while removing references to specific keys
 
@@ -45,9 +44,7 @@ def edit_dictionary(
     return copy_dict
 
 
-def same_json_or_remove(
-    parameters: dict, output: str, verbose: bool
-) -> bool:
+def same_json_or_remove(parameters: dict, output: str, verbose: bool) -> bool:
     """
     If the file exist and the json is the same returns True.
     Else: removes the file and the json associated with it.
@@ -70,9 +67,7 @@ def same_json_or_remove(
     json_file = json_filename(output)
     if os.path.exists(json_file):
         if os.path.exists(output):
-            if check_same_existing_json(
-                parameters, json_file, verbose
-            ):
+            if check_same_existing_json(parameters, json_file, verbose):
                 if verbose:
                     print(f"File {output} already created with these parameters")
                 return True
@@ -82,9 +77,7 @@ def same_json_or_remove(
     return False
 
 
-def check_same_existing_json(
-    parameters: dict, json_file: str, verbose: bool
-) -> bool:
+def check_same_existing_json(parameters: dict, json_file: str, verbose: bool) -> bool:
     """
     Go through the new parameters checking for diferences.
     Missing parameters in new parameters omitted
@@ -118,7 +111,7 @@ def check_same_existing_json(
             return False
 
     # Check dates for all input files dates are consistent
-    input_files = parameters['input_files']
+    input_files = parameters["input_files"]
 
     if isinstance(input_files, str):
         # generalize for input fields containing lists
@@ -135,9 +128,7 @@ def check_same_existing_json(
                 old_date = prev_parameters["input_modification_date"]
                 new_date = in_data["date"]
                 if verbose:
-                    print(
-                        f"updated file {json_file}: old:{old_date}, new:{new_date}"
-                    )
+                    print(f"updated file {json_file}: old:{old_date}, new:{new_date}")
                 return False
     return True
 
@@ -181,11 +172,7 @@ def remove_file_and_json(output: str) -> None:
         os.remove(json_file)
 
 
-def write_log_file(
-    params: dict,
-    file_outputs: list,
-    dir_name: str
-    ) -> None:
+def write_log_file(params: dict, file_outputs: list, dir_name: str) -> None:
     """
     Removes the original file path and the asociated json file
 
@@ -203,12 +190,12 @@ def write_log_file(
     """
 
     data = params.copy()
-    temp_date_str = ''
+    temp_date_str = ""
     for output in file_outputs:
         log_path = json_filename(output)
         actual_date = datetime.now(datetime.timezone.utc)
         data["input_modification_date"] = None
-        for input_file in data['input_files']:
+        for input_file in data["input_files"]:
             input_json = json_filename(input_file)
             if os.path.exists(os.path.join(dir_name, input_json)):
                 with open(os.path.join(dir_name, input_json)) as file:

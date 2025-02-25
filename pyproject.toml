@@ -1,5 +1,19 @@
-[tool.pytest.ini_options]
-addopts = [
-    "--import-mode=importlib",
+[project]
+name = "calcium-imaging-analysis-pipeline"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "ipywidgets>=8.1.5",
+    "matplotlib>=3.9.4",
+    "pandas>=2.2.3",
+    "scipy>=1.13.1",
+    "typing-extensions>=4.12.2",
 ]
-pythonpath = "src"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4",
+    "ruff>=0.9.6",
+]
