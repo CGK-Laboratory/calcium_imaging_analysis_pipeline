@@ -3,15 +3,16 @@ import json
 from typing_extensions import Self
 import pandas as pd
 
-from cgk_calcium_tools.files_io import (
+from .files_io import (
     json_filename,
     RecordingFile,
 )
-from cgk_calcium_tools.handlers_functions import flatt_lists,hierarchy_from_paths,update_nested_lists
-from cgk_calcium_tools.jupyter_outputs import progress_bar
+from .handlers_functions import flatt_lists,hierarchy_from_paths,update_nested_lists
+from .jupyter_outputs import progress_bar
 from datetime import datetime, timezone
-from cgk_calcium_tools.pipeline_functions import rec_functions
+from .pipeline_functions import rec_functions
 from .params_tools import _global_parameters
+
 
 class RecordingHandler:
     """
@@ -96,8 +97,9 @@ class RecordingHandler:
         pb = progress_bar(len(self.recordings_list), rec_functions[fun]['message'])
         changes = []
         for rec_input in self.recordings_list:
-            new_rec, additional_outputs = rec_functions[fun]['function'](rec_input, output_folder=self.output_folder, 
+            new_filename, additional_outputs = rec_functions[fun]['function'](rec_input, output_folder=self.output_folder, 
                                                                          parameters=parameters, verbose=verbose)
+            new_rec = load_recording(self.output_folder,new_filename)
             changes[rec_input]=new_rec
             pb.update_progress_bar(1)
 

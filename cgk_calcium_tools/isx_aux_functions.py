@@ -1,11 +1,16 @@
-import isx
+try:
+    import isx
+    isx_support = True
+except ImportError:
+    isx_support = False
+    pass
 import numpy as np
 import os
 from typing import Iterable
 import warnings
 from pathlib import Path
 import shutil
-from .files_io import RecordingFile
+from .files_io import RecordingFile, register_reader
 from .recordings_handler import RecordingHandler
 import re
 from .jupyter_outputs import progress_bar
@@ -87,6 +92,7 @@ def load_isxd_files( main_data_folder: str = ".",
     return RecordingHandler(main_data_folder, recordings, output_folder, label,infere_hierarchy=infere_hierarchy)
 
 
+@register_reader(".isxd")
 def read_isxd_file(main_folder, file, output_folder='.'):
     video = isx.Movie.read(os.path.join(main_folder,file))
     resolution = video.spacing.num_pixels

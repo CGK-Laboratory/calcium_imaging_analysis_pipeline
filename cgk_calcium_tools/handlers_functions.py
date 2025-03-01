@@ -1,3 +1,4 @@
+import os
 def get_deepest_level(hierarchy):
     groups = []
         
@@ -21,10 +22,10 @@ def flatt_lists(hierarchy):
             flat_list.append(element)
     return flat_list
 
-def hierarqy_from_paths(recordings):
+def hierarchy_from_paths(recordings):
     root = {'.': []}
     for rec in recordings:
-        parts = rec.name.split('/')
+        parts = rec.file.split(os.path.sep)
         current = root
         if len(parts) == 1:
             current['.'].append(rec)

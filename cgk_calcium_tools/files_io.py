@@ -2,10 +2,15 @@ import os
 import json
 from datetime import datetime
 from typing import NamedTuple, Iterable, Union
+from collections.abc import Callable
+
+
+class FormatNotSupportedError(Exception):
+    pass
 
 
 class RecordingFile(NamedTuple):
-    file: str = "" #file path relative to main_folder
+    file: str = ""  # file path relative to main_folder
     main_folder: str = ""
     efocus: Iterable[Union[int, float]] = []
     resolution: Iterable = []
@@ -16,6 +21,39 @@ class RecordingFile(NamedTuple):
     creation_function: str = ""
     source_files: list = []
     creation_function: dict = {}
+
+
+file_readers: dict[str, Callable] = {}
+
+
+def register_reader(format_name):
+    def decorator(func):
+        file_readers[format_name] = func
+        return func
+
+    return decorator
+
+
+def load_recording_file(
+    file: str,
+    main_folder: str,
+    creation_function,
+    source_files,
+    related_files: list,
+    output_folder=".",
+) -> RecordingFile:
+    file_path = os.path.join(main_folder, file)
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File {file_path} Not Found")
+    ext = os.path.splitext(file)[1]
+    if ext not in file_readers:
+        raise FormatNotSupportedError(
+            f"Format '{format}' not supported. Check libraries installed."
+        )
+
+    return file_readers[format](
+        main_folder=main_folder, file=file, output_folder=output_folder
+    )
 
 
 def edit_dictionary(d: dict, keys_to_remove: list = [], to_update: dict = {}) -> dict:

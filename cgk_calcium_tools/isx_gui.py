@@ -1,11 +1,15 @@
+from .isx_aux_functions import isx_support
+if isx_support is False:
+    pass
+
 import numpy as np
 from pathlib import Path
 import os
-from .recordings_handler import isx_RecordingHandler
+from .cellsets_handler import CellsetsHandler
 import isx
 
 
-def create_inscopix_projects(fh: isx_RecordingHandler, cellsetname="pca-ica"):
+def create_inscopix_projects(fh: CellsetsHandler, cellsetname="pca-ica"):
     """
     Creates an Inscopix project file (.isxp) from a given isx_RecordingHandler object and cellset result.
 
