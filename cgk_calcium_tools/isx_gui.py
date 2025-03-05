@@ -1,7 +1,3 @@
-from .isx_aux_functions import isx_support
-if isx_support is False:
-    pass
-
 import numpy as np
 from pathlib import Path
 import os

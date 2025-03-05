@@ -103,9 +103,12 @@ def fix_frames(
         plt.ylabel("Standardize Mean Frame Fluorescence")
         plt.xlabel("Frame")
         plt.title("Fixes: {} frames".format(len(broken_frames)))
-        fig.savefig(os.path.splitext(file)[0] + ".png")
+        output_figure = os.path.splitext(file)[0] + ".png"
+        fig.savefig(output_figure)
         plt.close(fig)
-    return len(broken_frames)
+    else:
+        output_figure = None
+    return len(broken_frames), output_figure
 
 
 def longitudinal_registration(

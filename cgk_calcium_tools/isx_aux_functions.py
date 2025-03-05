@@ -1,9 +1,4 @@
-try:
-    import isx
-    isx_support = True
-except ImportError:
-    isx_support = False
-    pass
+import isx
 import numpy as np
 import os
 from typing import Iterable
@@ -15,7 +10,7 @@ from .recordings_handler import RecordingHandler
 import re
 from .jupyter_outputs import progress_bar
 import json
-
+import datetime
 
 def load_isxd_files( main_data_folder: str = ".",
     output_folder: str = ".",
@@ -93,7 +88,13 @@ def load_isxd_files( main_data_folder: str = ".",
 
 
 @register_reader(".isxd")
-def read_isxd_file(main_folder, file, output_folder='.'):
+def read_isxd_file(main_folder:str,
+                   file:str, 
+                   output_folder:str='.',
+                   update_timestamp:str=None,
+                   additional_files:list[str]=[],
+                   creation_function:str='raw_isxd',
+                   source_files:list[str]=[])->RecordingFile:
     video = isx.Movie.read(os.path.join(main_folder,file))
     resolution = video.spacing.num_pixels
     duration = video.timing.num_samples * video.timing.period.to_usecs() / 1e6
@@ -112,9 +113,10 @@ def read_isxd_file(main_folder, file, output_folder='.'):
         resolution=resolution,
         duration=duration,
         frames_per_second=frames_per_second,
-        update_timestamp=[None],
-        source_files=[None],
-        creation_function={}
+        update_timestamp=update_timestamp,
+        source_files=source_files,
+        creation_function=creation_function,
+        additional_files=additional_files
     )
 
 def get_efocus(file,outputfolder,video):

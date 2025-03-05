@@ -14,7 +14,7 @@ def plot_grid_max_dff_and_cellmap_fh(
     single_plane: bool = True,
     **figure_kwargs,
 ):
-    fig = plt.figure(**figure_kwargs)
+    plt.figure(**figure_kwargs)
 
     if single_plane:
         nfigures = len(fh.p_rec_paths)
@@ -41,7 +41,7 @@ def plot_grid_max_dff_and_cellmap_fh(
 
 
 def plot_max_dff_and_cellmap_fh(
-    files_handler,
+    RecordingHandler,
     idx=0,
     eqhist=True,
     cellsetname="pca-ica",
@@ -55,10 +55,10 @@ def plot_max_dff_and_cellmap_fh(
 
     Parameters
     ----------
-    files_handler : isx_files_handler
-        isx_files_handler to use.
+    RecordingHandler : isx_RecordingHandler
+        isx_RecordingHandler to use.
     idx : int, optional
-        index of the session on files_handler, by default 0.
+        index of the session on RecordingHandler, by default 0.
     eqhist : bool, optional
         Equalize histogram to hadnle extreme values and get a normalized distribution of intensities. Default True
     cellsetname : str, optional
@@ -79,26 +79,26 @@ def plot_max_dff_and_cellmap_fh(
 
     """
     if not single_plane:
-        dataset = files_handler.get_results_filenames(
+        dataset = RecordingHandler.get_results_filenames(
             cellsetname, op=op, idx=[idx], single_plane=False
         )[0]
         # choose the plane to show, the closest to the mean efocus
-        media = np.mean(files_handler.efocus[idx])
+        media = np.mean(RecordingHandler.efocus[idx])
         local_efocus_idx = np.argmin(
-            np.abs(np.array(files_handler.efocus[idx]) - media)
+            np.abs(np.array(RecordingHandler.efocus[idx]) - media)
         )
-        efocus_file = files_handler.focus_files[files_handler.rec_paths[idx]][
+        efocus_file = RecordingHandler.focus_files[RecordingHandler.rec_paths[idx]][
             local_efocus_idx
         ]
-        efocus_idx = files_handler.p_rec_paths.index(efocus_file)
-        maxdff = files_handler.get_results_filenames(
+        efocus_idx = RecordingHandler.p_rec_paths.index(efocus_file)
+        maxdff = RecordingHandler.get_results_filenames(
             "maxdff", op=op, idx=[efocus_idx], single_plane=True
         )[0]
     else:
-        dataset = files_handler.get_results_filenames(
+        dataset = RecordingHandler.get_results_filenames(
             cellsetname, op=op, idx=[idx], single_plane=True
         )[0]
-        maxdff = files_handler.get_results_filenames(
+        maxdff = RecordingHandler.get_results_filenames(
             "maxdff", op=op, idx=[idx], single_plane=True
         )[0]
     plot_max_dff_and_cellmap(dataset, maxdff, eqhist, status_list, colors=colors)

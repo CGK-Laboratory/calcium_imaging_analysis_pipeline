@@ -3,7 +3,7 @@ import pandas as pd
 from pathlib import Path
 import numpy as np
 import os
-from .files_io import write_log_file, same_json_or_remove, parameters_for_isx
+from .files_io import write_log_file, same_json_or_remove
 from scipy.stats import skew
 
 def apply_quality_criteria(cell_set_files: list, metric_files: list, status_files: list,

@@ -21,10 +21,9 @@ class isx_prj_handler:
                 continue
             with open(isxp_file, "r") as f:
                 s = f.read()
-            try:
-                parsed_project = json.loads(s)
-            except:
-                parsed_project = json.loads(s[0:-1])
+            if s[-1]=='\x00':
+                s = s[0:-1]
+            parsed_project = json.loads(s)
             res = get_parent_and_file(parsed_project, "name", events_name)
             if res is None:
                 continue

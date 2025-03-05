@@ -1,7 +1,5 @@
 
-from .isx_aux_functions import isx_support, create_similar_empty_cellset
-if isx_support is False:
-    pass
+from .isx_aux_functions import  create_similar_empty_cellset
 import isx
 from typing import Union
 from .processing import fix_frames

@@ -1,6 +1,6 @@
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import NamedTuple, Iterable, Union
 from collections.abc import Callable
 
@@ -23,7 +23,7 @@ class RecordingFile(NamedTuple):
     creation_function: dict = {}
 
 
-file_readers: dict[str, Callable] = {}
+file_readers: dict[str, Callable[[str,str,str,list[str],str,list[str]], RecordingFile]] = {}
 
 
 def register_reader(format_name):
@@ -38,8 +38,9 @@ def load_recording_file(
     file: str,
     main_folder: str,
     creation_function,
-    source_files,
-    related_files: list,
+    source_files: list,
+    additional_files: list,
+    update_timestamp: str,
     output_folder=".",
 ) -> RecordingFile:
     file_path = os.path.join(main_folder, file)
@@ -52,7 +53,13 @@ def load_recording_file(
         )
 
     return file_readers[format](
-        main_folder=main_folder, file=file, output_folder=output_folder
+        main_folder=main_folder, 
+        file=file, 
+        output_folder=output_folder,
+        update_timestamp=update_timestamp,
+        additional_files=additional_files,
+        creation_function=creation_function,
+        source_files=source_files
     )
 
 
@@ -231,7 +238,7 @@ def write_log_file(params: dict, file_outputs: list, dir_name: str) -> None:
     temp_date_str = ""
     for output in file_outputs:
         log_path = json_filename(output)
-        actual_date = datetime.now(datetime.timezone.utc)
+        actual_date = datetime.now(timezone.utc)
         data["input_modification_date"] = None
         for input_file in data["input_files"]:
             input_json = json_filename(input_file)

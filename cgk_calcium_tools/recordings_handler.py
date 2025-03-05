@@ -6,6 +6,7 @@ import pandas as pd
 from .files_io import (
     json_filename,
     RecordingFile,
+    load_recording_file,
 )
 from .handlers_functions import flatt_lists,hierarchy_from_paths,update_nested_lists
 from .jupyter_outputs import progress_bar
@@ -84,9 +85,9 @@ class RecordingHandler:
     def get_metadata(self, function, parameters, label=None):
         pass
 
-    def apply(self, fun, parameters, label=None,verbose=False,
+    def apply(self, fun, suffix=None,verbose=False,
         **kws) -> Self:
-        if label is None:
+        if suffix is None:
             label = rec_functions[fun]['suffix']
         parameters = _global_parameters["functions"][fun].copy()
         for key, value in kws.items():
@@ -97,10 +98,15 @@ class RecordingHandler:
         pb = progress_bar(len(self.recordings_list), rec_functions[fun]['message'])
         changes = []
         for rec_input in self.recordings_list:
-            new_filename, additional_outputs = rec_functions[fun]['function'](rec_input, output_folder=self.output_folder, 
+            new_filename, additional_outputs = rec_functions[fun]['function'](rec_input, suffix=suffix,output_folder=self.output_folder, 
                                                                          parameters=parameters, verbose=verbose)
-            new_rec = load_recording(self.output_folder,new_filename)
-            changes[rec_input]=new_rec
+            new_rec = load_recording_file(file=self.output_folder,
+                                          main_file=new_filename,
+                                          creation_function=fun,
+                                          additional_files=additional_outputs,
+                                          main_folder=rec_input.main_folder,
+                                          source_files=[rec_input.file])
+            changes[rec_input] = new_rec
             pb.update_progress_bar(1)
 
 
