@@ -1,98 +1,119 @@
 {
     "functions": {
-        "isx:preprocessing": {
-            "temporal_downsample_factor":1, 
-            "spatial_downsample_factor":1, 
-            "crop_rect":null,
-            "fix_defective_pixels":true, 
-            "trim_early_frames":true,
-            "fix_frames_th_std":20
+        "isx:preprocessing+": {
+            "temporal_downsample_factor": 1,
+            "spatial_downsample_factor": 1,
+            "crop_rect": null,
+            "fix_defective_pixels": true,
+            "trim_early_frames": true,
+            "fix_frames_th_std": 20
         },
         "isx:spatial_filter": {
-            "low_cutoff":0.005,
-            "high_cutoff":0.5,
-            "retain_mean":false,
-            "subtract_global_minimum":true
+            "low_cutoff": 0.005,
+            "high_cutoff": 0.5,
+            "retain_mean": false,
+            "subtract_global_minimum": true
         },
         "isx:motion_correct": {
-            "max_translation":20,
-            "low_bandpass_cutoff":null, 
-            "high_bandpass_cutoff":null, 
-            "roi":null,
-            "reference_segment_index":0, 
-            "reference_frame_index":0, 
+            "max_translation": 20,
+            "low_bandpass_cutoff": null,
+            "high_bandpass_cutoff": null,
+            "roi": null,
+            "reference_segment_index": 0,
+            "reference_frame_index": 0,
             "reference_file_name": "",
-            "global_registration_weight":1.0,
-            "output_translation_files":null,
-            "output_crop_rect_file":null,
-            "preserve_input_dimensions":false
+            "global_registration_weight": 1.0,
+            "output_translation_files": null,
+            "output_crop_rect_file": null,
+            "preserve_input_dimensions": false
         },
         "isx:deconvolution": {
-            "accepted_only":true,
-            "spike_snr_threshold":3, 
-            "noise_range":[0.25,0.5], 
-            "noise_method":"mean",
-            "first_order_ar":true, 
-            "lags":5, 
+            "accepted_only": true,
+            "spike_snr_threshold": 3,
+            "noise_range": [
+                0.25,
+                0.5
+            ],
+            "noise_method": "mean",
+            "first_order_ar": true,
+            "lags": 5,
             "fudge_factor": 0.96,
-            "deconvolution_method":"oasis"
+            "deconvolution_method": "oasis"
         },
-        "isx:trim": {
-            "video_len": 900
+        "isx:trim+": {
+            "video_start_ms": 0,
+            "video_len_ms": 900000,
+            "keep_start_time": false
         },
         "isx:dff": {
             "f0_type": "mean"
         },
         "isx:cnmfe": {
-            "output_dir":".",
-            "cell_diameter":7,
-            "min_corr":0.8,
-            "min_pnr":10,
-            "bg_spatial_subsampling":2,
-            "ring_size_factor":1.4,
-            "gaussian_kernel_size":0,
-            "closing_kernel_size":0,
-            "merge_threshold":0.7,
-            "processing_mode":"parallel_patches",
-            "num_threads":4,
-            "patch_size":80,
-            "patch_overlap":20,
-            "output_unit_type":"df_over_noise"
+            "output_dir": ".",
+            "cell_diameter": 7,
+            "min_corr": 0.8,
+            "min_pnr": 10,
+            "bg_spatial_subsampling": 2,
+            "ring_size_factor": 1.4,
+            "gaussian_kernel_size": 0,
+            "closing_kernel_size": 0,
+            "merge_threshold": 0.7,
+            "processing_mode": "parallel_patches",
+            "num_threads": 4,
+            "patch_size": 80,
+            "patch_overlap": 20,
+            "output_unit_type": "df_over_noise"
         },
         "isx:pca-ica": {
-            "num_pcs":60,
-            "num_ics":50,
-            "unmix_type":"spatial",
-            "ica_temporal_weight":0,
-            "max_iterations":1000,
-            "convergence_threshold":1e-05,
-            "block_size":8000,
-            "auto_estimate_num_ics":false, 
-            "average_cell_diameter":13,
+            "num_pcs": 60,
+            "num_ics": 50,
+            "unmix_type": "spatial",
+            "ica_temporal_weight": 0,
+            "max_iterations": 1000,
+            "convergence_threshold": 1e-05,
+            "block_size": 8000,
+            "auto_estimate_num_ics": false,
+            "average_cell_diameter": 13,
             "comments": "Change block_size to use more/less ram"
         },
         "isx:event_detection": {
-            "threshold":6,
-            "tau":0.095,
-            "comments":"We selected this tau because we are using jGCaMP8m",
-            "event_time_ref":"maximum",
-            "ignore_negative_transients":true,
-            "accepted_cells_only":false
+            "threshold": 6,
+            "tau": 0.095,
+            "comments": "We selected this tau because we are using jGCaMP8m",
+            "event_time_ref": "maximum",
+            "ignore_negative_transients": true,
+            "accepted_cells_only": false
         },
         "isx:accept_reject": {
-            "filters": [["SNR", ">", 2],["Event Rate", ">", 0],["# Comps", "<", 3]]
+            "filters": [
+                [
+                    "SNR",
+                    ">",
+                    2
+                ],
+                [
+                    "Event Rate",
+                    ">",
+                    0
+                ],
+                [
+                    "# Comps",
+                    "<",
+                    3
+                ]
+            ]
         },
         "isx:multiplane_registration": {
-            "min_spat_correlation":0.5, 
-            "temp_correlation_thresh":0.99, 
-            "accepted_cells_only":false
+            "min_spat_correlation": 0.5,
+            "temp_correlation_thresh": 0.99,
+            "accepted_cells_only": false
         },
         "isx:project_movie": {
-            "stat_type":"max"
+            "stat_type": "max"
         },
         "isx:longitudinal_registration": {
-            "min_correlation":0.5,
-            "accepted_cells_only":false
+            "min_correlation": 0.5,
+            "accepted_cells_only": false
         }
     }
 }

@@ -89,14 +89,14 @@ def edit_dictionary(d: dict, keys_to_remove: list = [], to_update: dict = {}) ->
     return copy_dict
 
 
-def same_json_or_remove(parameters: dict, output: str, verbose: bool) -> bool:
+def same_json_or_remove(log_info: dict, output: str, verbose: bool) -> bool:
     """
     If the file exist and the json is the same returns True.
     Else: removes the file and the json associated with it.
 
     Parameters
     ----------
-    parameters : dict
+    log_info : dict
         Parameter dictionary of executed functions.
     output : str
         output files path
@@ -112,7 +112,7 @@ def same_json_or_remove(parameters: dict, output: str, verbose: bool) -> bool:
     json_file = json_filename(output)
     if os.path.exists(json_file):
         if os.path.exists(output):
-            if check_same_existing_json(parameters, json_file, verbose):
+            if check_same_existing_json(log_info, json_file, verbose):
                 if verbose:
                     print(f"File {output} already created with these parameters")
                 return True
@@ -122,14 +122,14 @@ def same_json_or_remove(parameters: dict, output: str, verbose: bool) -> bool:
     return False
 
 
-def check_same_existing_json(parameters: dict, json_file: str, verbose: bool) -> bool:
+def check_same_existing_json(log_info: dict, json_file: str, verbose: bool) -> bool:
     """
     Go through the new parameters checking for diferences.
     Missing parameters in new parameters omitted
 
     Parameters
     ----------
-    parameters : dict
+    log_info : dict
         Parameter dictionary of executed functions.
     json_file : str
        json files path
@@ -143,20 +143,20 @@ def check_same_existing_json(parameters: dict, json_file: str, verbose: bool) ->
 
     """
     with open(json_file) as file:
-        prev_parameters = json.load(file)
-    for key, value in parameters.items():
+        prev_log_info = json.load(file)
+    for key, value in log_info.items():
         # only comments can be different
-        if key not in prev_parameters:
+        if key not in prev_log_info:
             if verbose:
                 print(f"new parameter {key}")
             return False
-        elif prev_parameters[key] != value:
+        elif prev_log_info[key] != value:
             if verbose:
-                print(f"different {key}: old:{prev_parameters[key]}, new:{value}")
+                print(f"different {key}: old:{prev_log_info[key]}, new:{value}")
             return False
 
     # Check dates for all input files dates are consistent
-    input_files = parameters["input_files"]
+    input_files = log_info["input_files"]
 
     if isinstance(input_files, str):
         # generalize for input fields containing lists
@@ -169,8 +169,8 @@ def check_same_existing_json(parameters: dict, json_file: str, verbose: bool) ->
         if os.path.exists(json_file):
             with open(json_file) as in_file:
                 in_data = json.load(in_file)
-            if prev_parameters["input_modification_date"] < in_data["date"]:
-                old_date = prev_parameters["input_modification_date"]
+            if prev_log_info["input_modification_date"] < in_data["date"]:
+                old_date = prev_log_info["input_modification_date"]
                 new_date = in_data["date"]
                 if verbose:
                     print(f"updated file {json_file}: old:{old_date}, new:{new_date}")
@@ -217,13 +217,13 @@ def remove_file_and_json(output: str) -> None:
         os.remove(json_file)
 
 
-def write_log_file(params: dict, file_outputs: list, dir_name: str) -> None:
+def write_log_file(log_info: dict, file_outputs: list, dir_name: str) -> None:
     """
     Removes the original file path and the asociated json file
 
     Parameters
     ----------
-    params : dict
+    log_info : dict
         Parameter dictionary of executed functions. Paths should be relative.
     file_outputs :  list
     dirname : str
@@ -234,7 +234,7 @@ def write_log_file(params: dict, file_outputs: list, dir_name: str) -> None:
 
     """
 
-    data = params.copy()
+    data = log_info.copy()
     temp_date_str = ""
     for output in file_outputs:
         log_path = json_filename(output)

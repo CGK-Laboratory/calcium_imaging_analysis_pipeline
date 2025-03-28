@@ -12,12 +12,15 @@ from .jupyter_outputs import progress_bar
 import json
 import datetime
 
-def load_isxd_files( main_data_folder: str = ".",
+
+def load_isxd_files(
+    main_data_folder: str = ".",
     output_folder: str = ".",
-    label: str = 'pipeline',
+    label: str = "pipeline",
     files_pattern: str = r".*\.isxd",
     infere_hierarchy: bool = False,
-    overwrite: bool = False):
+    overwrite: bool = False,
+):
     """
     This class helps handle and process Inscopix files/movies.
 
@@ -27,7 +30,7 @@ def load_isxd_files( main_data_folder: str = ".",
         Root folder containing the data. Output data follows
         the folder structure after this root folder. By default "."
     output_folder : str, optional
-        Folder where the outputs are saved. By default "."        
+        Folder where the outputs are saved. By default "."
     files_pattern : str, optional
         Naming patterns for the files. Also an easy way to select for one or
         multiple files from the same folder. By default "**/*.isx" (selects all)
@@ -37,12 +40,12 @@ def load_isxd_files( main_data_folder: str = ".",
     files = []
     for file in Path(main_data_folder).rglob("*"):
         sfile = str(file)
-        if file.is_file() and regex.match(sfile):                
-            files.append(sfile) 
-    
+        if file.is_file() and regex.match(sfile):
+            files.append(sfile)
+
     recordings = []
     # Error if no files are found, lists if files were skipped
-    assert (len(files) > 0), "No file(s) found"
+    assert len(files) > 0, "No file(s) found"
 
     # Prints confirmation of number of files found and skipped.
     print(f"{len(files)} file(s) found.")
@@ -53,9 +56,8 @@ def load_isxd_files( main_data_folder: str = ".",
     for file in files:
         # skip processing if metadata file already exists and overwrite is not allowed
         folder_structure = os.path.dirname(file)
-        if folder_structure != '.':
+        if folder_structure != ".":
             folder_structure = folder_structure[len(main_data_folder) + 1 :]
-
 
         json_file = os.path.join(
             output_folder,
@@ -74,8 +76,8 @@ def load_isxd_files( main_data_folder: str = ".",
 
         # Read the video file and grab metadata information
         assert file.endswith(".isxd"), "Files must be inscopix's recordings"
-        rec = read_isxd_file(main_data_folder,file)
-        
+        rec = read_isxd_file(main_data_folder, file)
+
         recordings.append(rec)
 
         os.makedirs(os.path.dirname(json_file), exist_ok=True)
@@ -84,18 +86,26 @@ def load_isxd_files( main_data_folder: str = ".",
         # Update progress bar
         pb.update_progress_bar(1)
 
-    return RecordingHandler(main_data_folder, recordings, output_folder, label,infere_hierarchy=infere_hierarchy)
+    return RecordingHandler(
+        main_data_folder,
+        recordings,
+        output_folder,
+        label,
+        infere_hierarchy=infere_hierarchy,
+    )
 
 
 @register_reader(".isxd")
-def read_isxd_file(main_folder:str,
-                   file:str, 
-                   output_folder:str='.',
-                   update_timestamp:str=None,
-                   additional_files:list[str]=[],
-                   creation_function:str='raw_isxd',
-                   source_files:list[str]=[])->RecordingFile:
-    video = isx.Movie.read(os.path.join(main_folder,file))
+def read_isxd_file(
+    main_folder: str,
+    file: str,
+    output_folder: str = ".",
+    update_timestamp: str = None,
+    additional_files: list[str] = [],
+    creation_function: str = "raw_isxd",
+    source_files: list[str] = [],
+) -> RecordingFile:
+    video = isx.Movie.read(os.path.join(main_folder, file))
     resolution = video.spacing.num_pixels
     duration = video.timing.num_samples * video.timing.period.to_usecs() / 1e6
     frames_per_second = 1 / (video.timing.period.to_usecs() / 1e6)
@@ -104,8 +114,7 @@ def read_isxd_file(main_folder:str,
     video.flush()
     del video  # usefull for windows
 
-
-    file_rel = file[len(main_folder) + 1:]
+    file_rel = file[len(main_folder) + 1 :]
     return RecordingFile(
         file=file_rel,
         main_folder=main_folder,
@@ -116,14 +125,13 @@ def read_isxd_file(main_folder:str,
         update_timestamp=update_timestamp,
         source_files=source_files,
         creation_function=creation_function,
-        additional_files=additional_files
+        additional_files=additional_files,
     )
 
-def get_efocus(file,outputfolder,video):
-# Lookig for multiplanes:
-    raw_gpio_file = (
-        os.path.splitext(file)[0] + ".gpio"
-    )  
+
+def get_efocus(file, outputfolder, video):
+    # Lookig for multiplanes:
+    raw_gpio_file = os.path.splitext(file)[0] + ".gpio"
     # raw data for gpio
     updated_gpio_file = (
         os.path.splitext(file)[0] + "_gpio.isxd"
@@ -146,7 +154,10 @@ def get_efocus(file,outputfolder,video):
         efocus = get_efocus_from_gpio(local_raw_gpio_file)
     else:
         get_acquisition_info = video.get_acquisition_info()
-        if get_acquisition_info is not None and "Microscope Focus" in get_acquisition_info:
+        if (
+            get_acquisition_info is not None
+            and "Microscope Focus" in get_acquisition_info
+        ):
             if not isx.verify_deinterleave(
                 file, get_acquisition_info["Microscope Focus"]
             ):
@@ -159,11 +170,8 @@ def get_efocus(file,outputfolder,video):
                 efocus = [get_acquisition_info["Microscope Focus"]]
         else:
             efocus = [0]
-            print(
-                f"Info: Unable to verify Microscope Focus config in: {file}"
-            )
+            print(f"Info: Unable to verify Microscope Focus config in: {file}")
     return efocus
-
 
 
 def get_efocus_from_gpio(gpio_file: str) -> list:
@@ -191,19 +199,21 @@ def get_efocus_from_gpio(gpio_file: str) -> list:
     ), f"{gpio_file}: Too many efocus detected, early frames issue."
     return [int(v) for v in video_efocus]
 
-def create_random_movie(output_file: str,num_samples:int=1000,num_pixels:tuple=(300, 400)):
+
+def create_random_movie(
+    output_file: str, num_samples: int = 1000, num_pixels: tuple = (300, 400)
+):
 
     timing = isx.Timing(num_samples=num_samples)
     spacing = isx.Spacing(num_pixels=num_pixels)
-    movie = isx.Movie.write(output_file, timing, 
-                            spacing, np.float32)
-    
+    movie = isx.Movie.write(output_file, timing, spacing, np.float32)
+
     for i in range(num_samples):
         movie.set_frame_data(i, np.random.random(num_pixels).astype(np.float32))
     movie.flush()
-                                                                
 
-def create_similar_empty_events(cell_set_file,ed_file):
+
+def create_similar_empty_events(cell_set_file, ed_file):
     """
     Creates an empty event set file with the timing information from a given cell set file.
 
@@ -220,11 +230,13 @@ def create_similar_empty_events(cell_set_file,ed_file):
     del evset  # isx keeps the file open otherwise
 
 
-def create_empty_cellset(output_cell_set_file: str,
-                         pixels: tuple=(500, 300),
-                         num_samples:int=3000,
-                         msec:int=1000):
-    
+def create_empty_cellset(
+    output_cell_set_file: str,
+    pixels: tuple = (500, 300),
+    num_samples: int = 3000,
+    msec: int = 1000,
+):
+
     timing = isx.Timing(num_samples=num_samples, period=isx.Duration.from_msecs(msec))
     spacing = isx.Spacing(num_pixels=pixels)
     cell_set = isx.CellSet.write(
@@ -237,6 +249,7 @@ def create_empty_cellset(output_cell_set_file: str,
     cell_set.set_cell_data(0, image_null, trace_null, "")
     cell_set.flush()
     del cell_set  # isx keeps the file open otherwise
+
 
 def create_similar_empty_cellset(input_file: str, output_cell_set_file: str):
     """
@@ -261,7 +274,8 @@ def create_similar_empty_cellset(input_file: str, output_cell_set_file: str):
     cell_set.flush()
     del cell_set  # isx keeps the file open otherwise
 
-def cellset_is_empty(cellset: str, accepted_only:bool = True):
+
+def cellset_is_empty(cellset: str, accepted_only: bool = True):
     """
     Checks if a cellset file is empty.
 
@@ -274,7 +288,7 @@ def cellset_is_empty(cellset: str, accepted_only:bool = True):
     """
     cs = isx.CellSet.read(cellset)
     is_empty = True
-    
+
     if not accepted_only:
         is_empty = cs.num_cells == 0
     else:
@@ -282,10 +296,10 @@ def cellset_is_empty(cellset: str, accepted_only:bool = True):
             if cs.get_cell_status(n) == "accepted":
                 is_empty = False
                 break
-                
+
     cs.flush()
     del cs  # isx keeps the file open otherwise
-    
+
     return is_empty
 
 
