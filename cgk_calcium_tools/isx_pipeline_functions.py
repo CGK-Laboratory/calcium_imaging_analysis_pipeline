@@ -59,112 +59,104 @@ def isx_preprocessing(recording, output_folder, suffix, parameters, verbose) -> 
     return output_figure
 
 
-# @register('isx:cnmfe',"Extracting Cells...",'cnmfe')
-@register("isx:pca_ica", "Extracting Cells...", "pca_ica")
-def extract_cells(  # broken
-    self,
-    alg: str,
-    overwrite: bool = False,
-    verbose: bool = False,
-    cells_extr_params: Union[dict, None] = None,
-    cellsetname: Union[str, None] = None,
-) -> None:
+@register("isx:cnmfe", "Extracting Cells using cnmfe...", "cnmfe")
+def isx_cnmfe(recording, output_folder, suffix, verbose: bool, **parameters) -> None:
     """
-    This function run a cell extraction algorithm, detect events
-    and auto accept_reject
-
-    Parameters
-    ----------
-    alg : str
-        Cell extraction algorithm: 'cnmfe' or 'pca-ica'
-    overwrite : bool, optional
-        Force compute everything again, by default False
-    verbose : bool, optional
-        Show additional messages, by default False
-    cells_extr_params : Union[dict,None], optional
-        Parameters for cell extraction, by default None
-    detection_params : Union[dict,None], optional
-        Parameters for event detection, by default None
-    accept_reject_params : Union[dict,None], optional
-        Parameters for automatic accept_reject cell, by default None
-    Returns
-    -------
-    None
-
+    This function run a cell extraction algorithm
     """
-    assert alg in ["pca-ica", "cnmfe"], "alg must be 'pca-ica' or 'cnmfe'."
+    input_file = os.path.join(recording.main_folder, recording.file)
+    fname, ext = os.path.splitext(recording.file)
+    output_file_rel = fname + f"-{suffix}." + ext
+    output_file = os.path.join(output_folder, output_file_rel)
 
-    # extract cells
-    parameters = self.default_parameters[alg].copy()
-    if cells_extr_params is not None:
-        for key, value in cells_extr_params.items():
-            assert key in parameters, f"The parameter: {key} does not exist"
-            parameters[key] = value
+    log_info = {
+        "function_params": parameters.copy(),
+        "function": "isx:pca_ica",
+        "isx_version": isx.__version__,
+        "input_files": [recording.file],
+    }
 
-    if alg == "pca-ica":
-        cell_det_fn = isx.pca_ica
-        # pca uses dff:
-        inputs_files = self.get_results_filenames("dff", op="MC")
-    elif alg == "cnmfe":
-        cell_det_fn = isx.run_cnmfe
-        inputs_files = self.get_filenames(op=None)
-    else:
-        raise "alg must be 'pca-ica' or 'cnmfe'."
-    if cellsetname is None:
-        cellsetname = alg
-    cellsets = self.get_results_filenames(f"{cellsetname}", op=None)
+    if same_json_or_remove(
+        log_info,
+        output=output_file,
+        verbose=verbose,
+    ):
+        return
 
-    if overwrite:
-        for fout in cellsets:
-            if os.path.exists(fout):
-                os.remove(fout)
-                json_file = os.path.join(
-                    os.path.dirname(fout), os.path.splitext(fout)[0], ".json"
-                )
-                if os.path.exists(json_file):
-                    os.remove(json_file)
-
-    for input, output in zip(inputs_files, cellsets):
-        new_data = {
-            "input_movie_files": os.path.basename(input),
-            "output_cell_set_files": os.path.basename(output),
+    parameters.update(
+        {
+            "input_movie_files": input_file,
+            "output_cell_set_files": output_file,
         }
-        parameters.update(new_data)
-        if same_json_or_remove(
-            parameters,
-            input_files_keys=["input_movie_files"],
-            output=output,
-            verbose=verbose,
-        ):
-            continue
-        cell_det_fn(
-            parameters,
-            {"input_movie_files": input, "output_cell_set_files": output},
+    )
+
+    isx.run_cnmfe(**parameters)
+
+    if not os.path.exists(output_file):
+        print(
+            f"Warning: Algorithm pca_ica, failed to create file: {output_file}.\n"
+            + "Empty cellmap created with its place"
+        )
+        create_similar_empty_cellset(
+            input_file=input_file,
+            output_cell_set_file=output_file,
         )
 
-        if not os.path.exists(output):
-            print(
-                f"Warning: Algorithm {alg}, failed to create file: {output}.\n"
-                + "Empty cellmap created with its place"
-            )
-            create_similar_empty_cellset(
-                input_file=input,
-                output_cell_set_file=output,
-            )
+    write_log_file(
+        log_info=log_info, dir_name=output_folder, file_outputs=[output_file_rel]
+    )
 
-        write_log_file(
-            parameters,
-            os.path.dirname(output),
-            {"function": alg},
-            input_files_keys=["input_movie_files"],
-            output_file_key="output_cell_set_files",
+
+@register("isx:pca_ica", "Extracting cells using pca-ica...", "pca_ica")
+def isx_pca_ica(recording, output_folder, suffix, verbose: bool, **parameters) -> None:
+    """
+    This function run a cell extraction algorithm
+    """
+    input_file = os.path.join(recording.main_folder, recording.file)
+    fname, ext = os.path.splitext(recording.file)
+    output_file_rel = fname + f"-{suffix}." + ext
+    output_file = os.path.join(output_folder, output_file_rel)
+
+    log_info = {
+        "function_params": parameters.copy(),
+        "function": "isx:pca_ica",
+        "isx_version": isx.__version__,
+        "input_files": [recording.file],
+    }
+
+    if same_json_or_remove(
+        log_info,
+        output=output_file,
+        verbose=verbose,
+    ):
+        return
+
+    parameters.update(
+        {
+            "input_movie_files": input_file,
+            "output_cell_set_files": output_file,
+        }
+    )
+
+    isx.pca_ica(**parameters)
+
+    if not os.path.exists(output_file):
+        print(
+            f"Warning: Algorithm pca_ica, failed to create file: {output_file}.\n"
+            + "Empty cellmap created with its place"
         )
-    if verbose:
-        print("Cell extraction, done")
+        create_similar_empty_cellset(
+            input_file=input_file,
+            output_cell_set_file=output_file,
+        )
+
+    write_log_file(
+        log_info=log_info, dir_name=output_folder, file_outputs=[output_file_rel]
+    )
 
 
 @register("isx:de_interleave", "De-interleaving multiplane movies...", "DI")
-def de_interleave(recording, output_folder, suffix, verbose: bool, **kws) -> None:
+def isx_de_interleave(recording, output_folder, suffix, verbose: bool, **kws) -> None:
     """
     This function applies the isx.de_interleave function, which de-interleaves multiplane movies
 
