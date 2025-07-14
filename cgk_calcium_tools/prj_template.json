@@ -1,0 +1,18 @@
+{
+    "fileVersion": 0,
+    "name": "{prj_name}",
+    "producer": {
+        "name": "isxcore",
+        "version": [
+            1,
+            9,
+            2
+        ]
+    },
+    "rootGroup": {
+        "itemType": 0,
+        "items": [{plane_1ist}
+        ],
+        "name": "/"
+    }
+}

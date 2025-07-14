@@ -3,3 +3,6 @@ scipy
 pandas
 matplotlib
 hvplot
+xarray
+jupyter_bokeh
+ipywidgets
