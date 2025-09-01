@@ -10,33 +10,81 @@ import noise
 # k = -5.1 1/s
 
 
-def create_simulation():
-    # Perlin noise parameters
-    perlin_params = {
-        "scale": 70.0,
-        "octaves": 2,
-        "persistence": 2,
-        "lacunarity": 9,
-        "repeatx": 100,
-        "repeaty": 100,
-        "base": 0,
-    }
+def create_simulation(
+    pixel_sizes=(600, 728),
+    max_drift=7,
+    n_neurons=5,
+    max_cell_diameter=10,
+    min_cell_diameter=7,
+    seconds_time=60,
+    period_ms=50,
+    min_firerate=1,
+    max_firerate=20,
+    noise_level=0.06,
+    background_scale=0.5,
+    corrupted_frame_p=0.001,
+    ca_level=(2, 4),
+    filename="simulation.isxd",
+    perlin_params=None,
+):
+    """
+    Create a simulated calcium imaging dataset with realistic neuron activity.
 
-    pixel_sizes = [600, 728]  # height x width
-    max_drift = 7  # pixels in each direction
-    N_neurons = 5  # n neurons
-    max_cell_diameter = 10  # max neuron diameter
-    min_cell_diameter = 7  # min neuron diameter
-    seconds_time = 60  # 1 minutoe
-    period_ms = 50  # (20 Hz => 50 ms)
-    min_firerate = 1  # 1 a 20 per minute
-    max_firerate = 20  # 1 a 20 per minute https://elifesciences.org/articles/66048
+    Parameters:
+    -----------
+    pixel_sizes : tuple, default (600, 728)
+        Image dimensions as (height, width)
+    max_drift : int, default 7
+        Maximum drift in pixels in each direction
+    n_neurons : int, default 5
+        Number of neurons to simulate
+    max_cell_diameter : int, default 10
+        Maximum neuron diameter in pixels
+    min_cell_diameter : int, default 7
+        Minimum neuron diameter in pixels
+    seconds_time : int, default 60
+        Duration of simulation in seconds
+    period_ms : int, default 50
+        Frame period in milliseconds (20 Hz = 50 ms)
+    min_firerate : float, default 1
+        Minimum firing rate (spikes per minute)
+    max_firerate : float, default 20
+        Maximum firing rate (spikes per minute)
+    noise_level : float, default 0.06
+        Level of additive noise
+    background_scale : float, default 0.5
+        Scale factor for background noise
+    corrupted_frame_p : float, default 0.001
+        Probability of corrupted frames
+    ca_level : tuple, default (2, 4)
+        Calcium level range (min, max)
+    filename : str, default "simulation.isxd"
+        Output filename for the ISX movie
+    perlin_params : dict, optional
+        Parameters for Perlin noise generation. If None, uses default values.
+
+    Returns:
+    --------
+    str
+        Path to the created ISX movie file
+    """
+    # Default Perlin noise parameters
+    if perlin_params is None:
+        perlin_params = {
+            "scale": 70.0,
+            "octaves": 2,
+            "persistence": 2,
+            "lacunarity": 9,
+            "repeatx": 100,
+            "repeaty": 100,
+            "base": 0,
+        }
+
+    # Convert tuple to list for easier manipulation
+    pixel_sizes = list(pixel_sizes)
+    ca_level = list(ca_level)
+
     num_samples = int(seconds_time * (1000 / period_ms))
-    noise_level = 0.06
-    background_scale = 0.5
-    corrupted_frame_p = 0.001
-    ca_level = [2, 4]
-    filename = "simulation.isxd"
 
     x = np.zeros(num_samples)
     y = np.zeros(num_samples)
@@ -58,17 +106,17 @@ def create_simulation():
     extra_pixel_sizes = [d + max_drift * 2 for d in pixel_sizes]
     border = max_cell_diameter + max_drift
     gamma = np.exp(-5.1 * period_ms / 1000)
-    cells_diameter = np.random.randint(min_cell_diameter, max_cell_diameter, N_neurons)
+    cells_diameter = np.random.randint(min_cell_diameter, max_cell_diameter, n_neurons)
     cells_sigma = cells_diameter / 4
 
     centers = [
         [np.random.randint(border, x - border) for x in pixel_sizes]
-        for i in range(N_neurons)
+        for i in range(n_neurons)
     ]
 
-    trueA = np.zeros((extra_pixel_sizes + [N_neurons]), dtype=np.float32)  # area
+    trueA = np.zeros((extra_pixel_sizes + [n_neurons]), dtype=np.float32)  # area
 
-    for i in range(N_neurons):
+    for i in range(n_neurons):
         tmp = np.zeros(extra_pixel_sizes)
         tmp[tuple(d // 2 for d in extra_pixel_sizes)] = 1.0
         z = np.linalg.norm(gaussian_filter(tmp, cells_sigma[i]).ravel())
@@ -76,17 +124,17 @@ def create_simulation():
         trueA[:, :, i] = gaussian_filter(trueA[:, :, i], cells_sigma[i]) / z
 
     firerate = (
-        np.random.rand(N_neurons, 1) * (max_firerate - min_firerate) + min_firerate
+        np.random.rand(n_neurons, 1) * (max_firerate - min_firerate) + min_firerate
     ) / 60
-    events = np.random.rand(N_neurons, num_samples) < (firerate * period_ms / 1000)
+    events = np.random.rand(n_neurons, num_samples) < (firerate * period_ms / 1000)
     traces = events.astype(np.float32)  # spikes
     for i in range(1, num_samples):
         traces[:, i] += gamma * traces[:, i - 1]
 
     cells_ca_level = (
-        np.random.rand(N_neurons, 1) * (ca_level[1] - ca_level[0]) + ca_level[0]
+        np.random.rand(n_neurons, 1) * (ca_level[1] - ca_level[0]) + ca_level[0]
     )
-    for c in range(N_neurons):
+    for c in range(n_neurons):
         traces[c, :] = traces[c, :] * cells_ca_level[c] + cells_ca_level[c]
 
     background = np.zeros(extra_pixel_sizes)
@@ -139,3 +187,11 @@ def create_simulation():
         movie.set_frame_data(i, data_drift[:, :, i].astype(np.float32))
     movie.flush()
     del movie
+
+    return filename
+
+
+if __name__ == "__main__":
+    # Example usage
+    output_file = create_simulation()
+    print(f"Simulation created: {output_file}")
