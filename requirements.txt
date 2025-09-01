@@ -6,3 +6,4 @@ hvplot
 xarray
 jupyter_bokeh
 ipywidgets
+noise

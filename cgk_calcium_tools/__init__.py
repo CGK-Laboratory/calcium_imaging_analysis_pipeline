@@ -3,3 +3,4 @@ from .image_tools import plot_max_dff_and_cellmap_fh, plot_grid_max_dff_and_cell
 from .analysis_utils import *
 from .isx_gui import create_inscopix_projects
 from .prj_handler import isx_prj_handler
+from .simulator import create_simulation
